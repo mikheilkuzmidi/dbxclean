@@ -1,12 +1,15 @@
 """Main FastAPI application with rate limiting and safe operations"""
 
-from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks
+from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional, Dict
 from datetime import datetime
 import asyncio
 from contextlib import asynccontextmanager
+import psutil
+import io
 
 from .config import settings
 from .database import get_db, init_db
@@ -16,8 +19,15 @@ from .analyzers.duplicate import DuplicateDetector
 from .analyzers.similar import SimilarImageDetector
 from .analyzers.quality import ImageQualityScorer
 from .analyzers.naming import FileNamingAnalyzer
+from .logging_config import setup_logging, logger
+from .validators import (
+    validate_dropbox_path,
+    validate_file_paths,
+    validate_rename_operations,
+    validate_limit_offset
+)
 
-from pydantic import BaseModel
+from pydantic import BaseModel, validator
 
 
 # Rate limiting configuration for Dropbox API
@@ -58,8 +68,12 @@ rate_limiter = RateLimiter(RATE_LIMIT_REQUESTS, RATE_LIMIT_WINDOW)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Initialize database on startup"""
+    setup_logging(settings.debug)
+    logger.info("Starting Dropbox Sorter...")
     init_db()
+    logger.info("Database initialized")
     yield
+    logger.info("Shutting down Dropbox Sorter...")
 
 
 app = FastAPI(
@@ -93,15 +107,27 @@ class ScanRequest(BaseModel):
     recursive: bool = True
     analyze_images: bool = True
 
+    @validator('path')
+    def validate_path_field(cls, v):
+        return validate_dropbox_path(v) if v else ""
+
 
 class DeleteRequest(BaseModel):
     paths: List[str]
     confirm: bool = False  # Must be True to actually delete
 
+    @validator('paths')
+    def validate_paths_field(cls, v):
+        return validate_file_paths(v)
+
 
 class RenameRequest(BaseModel):
     operations: List[Dict[str, str]]  # [{"from": "old_path", "to": "new_path"}]
     confirm: bool = False  # Must be True to actually rename
+
+    @validator('operations')
+    def validate_ops_field(cls, v):
+        return validate_rename_operations(v)
 
 
 class AnalysisJobResponse(BaseModel):
@@ -128,6 +154,90 @@ def read_root():
         "version": "1.0.0",
         "status": "running"
     }
+
+
+@app.get("/api/health")
+def health_check(db: Session = Depends(get_db)):
+    """Health check endpoint"""
+    try:
+        # Check database
+        db.execute("SELECT 1")
+
+        # Check system resources
+        cpu_percent = psutil.cpu_percent(interval=0.1)
+        memory = psutil.virtual_memory()
+        disk = psutil.disk_usage('/')
+
+        return {
+            "status": "healthy",
+            "database": "connected",
+            "system": {
+                "cpu_percent": cpu_percent,
+                "memory_percent": memory.percent,
+                "disk_percent": disk.percent,
+            }
+        }
+    except Exception as e:
+        logger.error(f"Health check failed: {e}")
+        raise HTTPException(status_code=503, detail="Service unhealthy")
+
+
+@app.get("/api/system")
+def system_info(db: Session = Depends(get_db)):
+    """Get system information"""
+    cpu_percent = psutil.cpu_percent(interval=0.1)
+    memory = psutil.virtual_memory()
+    disk = psutil.disk_usage('/')
+
+    # Get database stats
+    total_files = db.query(FileMetadata).count()
+    total_jobs = db.query(AnalysisJob).count()
+
+    return {
+        "system": {
+            "cpu_percent": cpu_percent,
+            "memory_total": memory.total,
+            "memory_available": memory.available,
+            "memory_percent": memory.percent,
+            "disk_total": disk.total,
+            "disk_used": disk.used,
+            "disk_free": disk.free,
+            "disk_percent": disk.percent,
+        },
+        "database": {
+            "total_files": total_files,
+            "total_jobs": total_jobs,
+        }
+    }
+
+
+@app.get("/api/thumbnail/{file_id}")
+async def get_thumbnail(file_id: str, db: Session = Depends(get_db)):
+    """Get thumbnail for a file"""
+    try:
+        # Find file by dropbox_id
+        file = db.query(FileMetadata).filter(FileMetadata.dropbox_id == file_id).first()
+
+        if not file:
+            raise HTTPException(status_code=404, detail="File not found")
+
+        if not file.is_image:
+            raise HTTPException(status_code=400, detail="File is not an image")
+
+        # Get thumbnail from Dropbox
+        client = DropboxClient()
+        await rate_limiter.wait_if_needed()
+
+        thumbnail_data = client.get_thumbnail(file.path)
+
+        if not thumbnail_data:
+            raise HTTPException(status_code=404, detail="Thumbnail not available")
+
+        return Response(content=thumbnail_data, media_type="image/jpeg")
+
+    except Exception as e:
+        logger.error(f"Error getting thumbnail: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/connection", response_model=ConnectionResponse)

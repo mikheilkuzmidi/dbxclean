@@ -36,6 +36,31 @@ dropbox-sorter/
 - Node.js 18+
 - Dropbox account with API access
 
+## Quick Start
+
+The fastest way to get started:
+
+```bash
+# Clone or download the repository
+cd dropbox-sorter
+
+# Run the installation script
+./install.sh
+
+# Or use make
+make install
+
+# Verify everything is working
+./verify.sh
+# Or: make verify
+
+# Start the application
+./start.sh
+# Or: make start
+```
+
+For detailed setup instructions, see [SETUP.md](SETUP.md)
+
 ## Setup Instructions
 
 ### 1. Get Dropbox Access Token
@@ -143,6 +168,34 @@ Navigate to `http://localhost:3000` and start using Dropbox Sorter!
 4. Select files to rename
 5. Click "Rename Selected"
 6. Confirm the action
+
+## Available Commands
+
+The project includes convenient scripts and a Makefile:
+
+```bash
+# Installation
+./install.sh          # Automated installation
+make install          # Same as above
+
+# Verification
+./verify.sh           # Verify setup
+make verify           # Same as above
+
+# Running
+./start.sh            # Start both backend and frontend
+./stop.sh             # Stop all services
+make start            # Start services
+make stop             # Stop services
+
+# Individual services
+make backend          # Start backend only
+make frontend         # Start frontend only
+
+# Maintenance
+make clean            # Clean build artifacts
+make help             # Show all available commands
+```
 
 ## Configuration
 

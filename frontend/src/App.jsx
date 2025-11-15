@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, NavLink, useLocation } from 'react-router-dom';
 import './App.css';
 import { checkConnection } from './api';
 import Dashboard from './pages/Dashboard';
@@ -7,6 +7,7 @@ import Duplicates from './pages/Duplicates';
 import Similar from './pages/Similar';
 import Files from './pages/Files';
 import Settings from './pages/Settings';
+import NotFound from './pages/NotFound';
 
 function App() {
   const [connection, setConnection] = useState(null);
@@ -60,26 +61,26 @@ function App() {
           </div>
 
           <div className="sidebar-nav">
-            <Link to="/" className="nav-item">
+            <NavLink to="/" className={({ isActive }) => isActive ? "nav-item active" : "nav-item"} end>
               <span className="nav-icon">📊</span>
               Dashboard
-            </Link>
-            <Link to="/duplicates" className="nav-item">
+            </NavLink>
+            <NavLink to="/duplicates" className={({ isActive }) => isActive ? "nav-item active" : "nav-item"}>
               <span className="nav-icon">📋</span>
               Duplicates
-            </Link>
-            <Link to="/similar" className="nav-item">
+            </NavLink>
+            <NavLink to="/similar" className={({ isActive }) => isActive ? "nav-item active" : "nav-item"}>
               <span className="nav-icon">🖼️</span>
               Similar Images
-            </Link>
-            <Link to="/files" className="nav-item">
+            </NavLink>
+            <NavLink to="/files" className={({ isActive }) => isActive ? "nav-item active" : "nav-item"}>
               <span className="nav-icon">📁</span>
               All Files
-            </Link>
-            <Link to="/settings" className="nav-item">
+            </NavLink>
+            <NavLink to="/settings" className={({ isActive }) => isActive ? "nav-item active" : "nav-item"}>
               <span className="nav-icon">⚙️</span>
               Settings
-            </Link>
+            </NavLink>
           </div>
 
           <div className="sidebar-footer">
@@ -96,6 +97,7 @@ function App() {
             <Route path="/similar" element={<Similar />} />
             <Route path="/files" element={<Files />} />
             <Route path="/settings" element={<Settings connection={connection} />} />
+            <Route path="*" element={<NotFound />} />
           </Routes>
         </main>
       </div>
