@@ -49,10 +49,11 @@ def validate_file_paths(paths: list) -> list:
     if not paths:
         raise HTTPException(status_code=400, detail="No paths provided")
 
-    if len(paths) > 1000:
+    # SAFETY: Limit deletions to 100 files at once to prevent accidents
+    if len(paths) > 100:
         raise HTTPException(
             status_code=400,
-            detail="Too many paths (max 1000 at once)"
+            detail=f"Too many files selected ({len(paths)}). Maximum 100 files per operation for safety. Please delete in smaller batches."
         )
 
     validated = []
@@ -63,6 +64,13 @@ def validate_file_paths(paths: list) -> list:
         validated_path = validate_dropbox_path(path)
         if not validated_path:
             raise HTTPException(status_code=400, detail="Empty path not allowed in list")
+
+        # SAFETY: Prevent accidental root deletion
+        if validated_path == '/':
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot delete root folder"
+            )
 
         validated.append(validated_path)
 

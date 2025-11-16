@@ -394,15 +394,25 @@ async def delete_files(
     """
     Delete files from Dropbox
     SAFETY: Requires confirm=True to actually delete
+    SAFETY: Limited to 100 files per operation
+    SAFETY: Logs all deletions for audit trail
     """
     if not request.confirm:
         # Preview mode - just return what would be deleted
+        logger.info(f"Delete preview requested for {len(request.paths)} files")
         return {
             "preview": True,
             "files": request.paths,
             "count": len(request.paths),
             "message": "Set confirm=true to actually delete these files"
         }
+
+    # SAFETY: Log deletion attempt
+    logger.warning(f"DELETE OPERATION STARTED: {len(request.paths)} files requested for deletion")
+    for path in request.paths[:5]:  # Log first 5
+        logger.warning(f"  - {path}")
+    if len(request.paths) > 5:
+        logger.warning(f"  ... and {len(request.paths) - 5} more")
 
     # Actually delete files
     deleted = []
@@ -411,16 +421,27 @@ async def delete_files(
     for path in request.paths:
         await rate_limiter.wait_if_needed()
         try:
+            # SAFETY: Extra validation before deletion
+            if not path or path == '/':
+                failed.append({"path": path, "error": "Invalid path - cannot delete root"})
+                continue
+
             client.delete_file(path)
             deleted.append(path)
+            logger.info(f"DELETED: {path}")
 
             # Remove from database
             db.query(FileMetadata).filter(FileMetadata.path == path).delete()
 
         except Exception as e:
-            failed.append({"path": path, "error": str(e)})
+            error_msg = str(e)
+            logger.error(f"FAILED TO DELETE: {path} - {error_msg}")
+            failed.append({"path": path, "error": error_msg})
 
     db.commit()
+
+    # SAFETY: Log final results
+    logger.warning(f"DELETE OPERATION COMPLETED: {len(deleted)} deleted, {len(failed)} failed")
 
     return {
         "deleted": deleted,

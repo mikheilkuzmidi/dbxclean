@@ -49,11 +49,39 @@ function Similar() {
       return;
     }
 
+    // SAFETY: Extra confirmation for large deletions
+    if (pathsToDelete.length > 50) {
+      const reallyConfirm = window.confirm(
+        `⚠️ WARNING: You are about to delete ${pathsToDelete.length} images!\n\n` +
+        `This is a LARGE deletion. Are you absolutely sure?\n\n` +
+        `Click OK to proceed, or Cancel to go back.`
+      );
+      if (!reallyConfirm) {
+        return;
+      }
+    }
+
+    // SAFETY: Check for 100 file limit
+    if (pathsToDelete.length > 100) {
+      alert(`⚠️ SAFETY LIMIT: Cannot delete more than 100 files at once.\n\nYou selected ${pathsToDelete.length} images.\n\nPlease delete in smaller batches for safety.`);
+      return;
+    }
+
     try {
       setDeleting(true);
       const result = await deleteFiles(pathsToDelete, true);
 
-      alert(`Deleted ${result.deleted_count} files. Failed: ${result.failed_count}`);
+      if (result.failed_count > 0) {
+        alert(
+          `Deletion completed:\n\n` +
+          `✅ Successfully deleted: ${result.deleted_count} images\n` +
+          `❌ Failed: ${result.failed_count} images\n\n` +
+          `Check the console for details about failed deletions.`
+        );
+        console.error('Failed deletions:', result.failed);
+      } else {
+        alert(`✅ Successfully deleted ${result.deleted_count} images!`);
+      }
 
       if (result.deleted_count > 0) {
         loadSimilar(); // Reload data
@@ -62,7 +90,7 @@ function Similar() {
       setShowConfirm(false);
     } catch (error) {
       console.error('Failed to delete files:', error);
-      alert('Failed to delete files: ' + error.message);
+      alert(`❌ Error: ${error.message}\n\nNo files were deleted. Please try again.`);
     } finally {
       setDeleting(false);
     }
@@ -190,18 +218,39 @@ function Similar() {
         <div className="modal-overlay" onClick={() => setShowConfirm(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>Confirm Deletion</h2>
+              <h2>⚠️ Confirm Deletion</h2>
             </div>
             <div>
-              <p>Are you sure you want to delete {selectedCount} similar images?</p>
+              <p style={{ fontSize: '1.1rem', fontWeight: 600 }}>
+                Are you sure you want to delete {selectedCount} similar images?
+              </p>
               <p className="text-secondary text-small mt-2">
                 This will free up {formatBytes(selectedSize)} of space.
               </p>
-              <p className="text-small mt-2">
-                The best quality version of each image will be kept.
-              </p>
-              <p className="text-small mt-2" style={{ color: 'var(--accent-red)' }}>
-                ⚠️ This action cannot be undone!
+              <div style={{
+                backgroundColor: 'var(--bg-tertiary)',
+                padding: '1rem',
+                borderRadius: 'var(--radius-sm)',
+                marginTop: '1rem',
+                border: '2px solid var(--accent-red)'
+              }}>
+                <p className="text-small" style={{ color: 'var(--accent-red)', fontWeight: 600 }}>
+                  ⚠️ THIS ACTION CANNOT BE UNDONE!
+                </p>
+                <p className="text-small mt-2">
+                  The images will be permanently deleted from your Dropbox.
+                </p>
+                <p className="text-small mt-2" style={{ color: 'var(--accent-green)', fontWeight: 600 }}>
+                  ✅ The best quality version of each image will be kept.
+                </p>
+                {selectedCount > 20 && (
+                  <p className="text-small mt-2" style={{ color: 'var(--accent-yellow)', fontWeight: 600 }}>
+                    ⚠️ Large deletion: {selectedCount} images
+                  </p>
+                )}
+              </div>
+              <p className="text-small text-secondary mt-2">
+                ℹ️ Best quality images (highlighted) are protected and will NOT be deleted.
               </p>
             </div>
             <div className="modal-footer">
@@ -210,14 +259,14 @@ function Similar() {
                 onClick={() => setShowConfirm(false)}
                 disabled={deleting}
               >
-                Cancel
+                Cancel - Don't Delete
               </button>
               <button
                 className="btn-danger"
                 onClick={handleDeleteSelected}
                 disabled={deleting}
               >
-                {deleting ? 'Deleting...' : 'Delete Files'}
+                {deleting ? 'Deleting...' : `Yes, Delete ${selectedCount} Images`}
               </button>
             </div>
           </div>
