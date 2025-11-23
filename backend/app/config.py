@@ -7,10 +7,18 @@ from typing import Optional
 class Settings(BaseSettings):
     """Application settings"""
 
-    # Dropbox Configuration
+    # Mode Configuration
+    # Set to "dropbox" for Dropbox API or "local" for local filesystem
+    mode: str = "local"
+
+    # Dropbox Configuration (only used when mode="dropbox")
     dropbox_access_token: Optional[str] = None
     dropbox_app_key: Optional[str] = None
     dropbox_app_secret: Optional[str] = None
+
+    # Local Filesystem Configuration (only used when mode="local")
+    # Root directory to scan. Defaults to user's home directory if not specified
+    local_root_path: Optional[str] = None
 
     # Database
     database_url: str = "sqlite:///./dropbox_sorter.db"

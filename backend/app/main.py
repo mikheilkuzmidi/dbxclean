@@ -14,6 +14,7 @@ import io
 from .config import settings
 from .database import get_db, init_db
 from .dropbox_client import DropboxClient
+from .local_client import LocalFilesystemClient
 from .models import FileMetadata, AnalysisJob
 from .analyzers.duplicate import DuplicateDetector
 from .analyzers.similar import SimilarImageDetector
@@ -78,8 +79,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Dropbox Sorter",
-    description="Intelligent file deduplication and organization for Dropbox",
-    version="1.0.0",
+    description="Intelligent file deduplication and organization for Dropbox and local filesystems",
+    version="1.1.0",
     lifespan=lifespan
 )
 
@@ -96,9 +97,13 @@ app.add_middleware(
 # Pydantic models for API
 class ConnectionResponse(BaseModel):
     connected: bool
+    mode: Optional[str] = None
     account_id: Optional[str] = None
     name: Optional[str] = None
     email: Optional[str] = None
+    root_path: Optional[str] = None
+    readable: Optional[bool] = None
+    writable: Optional[bool] = None
     error: Optional[str] = None
 
 
@@ -137,13 +142,24 @@ class AnalysisJobResponse(BaseModel):
     message: str
 
 
-# Helper to get Dropbox client
-def get_dropbox_client():
-    """Get Dropbox client instance"""
+# Helper to get storage client (Dropbox or Local)
+def get_storage_client():
+    """Get storage client instance based on mode setting"""
     try:
-        return DropboxClient()
+        if settings.mode == "local":
+            return LocalFilesystemClient(settings.local_root_path)
+        elif settings.mode == "dropbox":
+            return DropboxClient()
+        else:
+            raise ValueError(f"Invalid mode: {settings.mode}. Must be 'local' or 'dropbox'")
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+# Legacy alias for backwards compatibility
+def get_dropbox_client():
+    """Get storage client instance (legacy alias)"""
+    return get_storage_client()
 
 
 @app.get("/")
@@ -224,8 +240,8 @@ async def get_thumbnail(file_id: str, db: Session = Depends(get_db)):
         if not file.is_image:
             raise HTTPException(status_code=400, detail="File is not an image")
 
-        # Get thumbnail from Dropbox
-        client = DropboxClient()
+        # Get thumbnail
+        client = get_storage_client()
         await rate_limiter.wait_if_needed()
 
         thumbnail_data = client.get_thumbnail(file.path)
@@ -552,7 +568,7 @@ async def run_scan_job(
         job.started_at = datetime.utcnow()
         db.commit()
 
-        client = DropboxClient()
+        client = get_storage_client()
         quality_scorer = ImageQualityScorer()
         similar_detector = SimilarImageDetector(db)
 

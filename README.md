@@ -1,17 +1,17 @@
 # Dropbox Sorter
 
-An intelligent file deduplication and organization tool for Dropbox that helps you clean up terabytes of data efficiently.
+An intelligent file deduplication and organization tool that helps you clean up terabytes of data efficiently - works with **both Dropbox and local filesystems**!
 
 ## Features
 
+- **🆕 Local & Cloud Support**: Works with both local filesystems and Dropbox - no API required for local mode!
 - **Duplicate File Detection**: Find exact duplicates based on content hash
 - **Similar Image Detection**: Find similar images using perceptual hashing (not exact matches)
 - **Image Quality Scoring**: Automatically identify the best quality version of similar images
 - **File Renaming Suggestions**: Get intelligent suggestions for poorly named files
-- **Cloud-Based Analysis**: Works with Dropbox cloud files without downloading everything to your laptop
 - **Minimalistic UI**: Clean, intuitive interface inspired by Dropbox and Apple Photos
 - **Safe Operations**: All deletions and renames require explicit user confirmation
-- **Rate Limiting**: Respects Dropbox API limits with intelligent rate limiting
+- **Rate Limiting**: Respects Dropbox API limits with intelligent rate limiting (Dropbox mode only)
 
 ## Architecture
 
@@ -34,7 +34,8 @@ dropbox-sorter/
 
 - Python 3.9+
 - Node.js 18+
-- Dropbox account with API access
+- **For Dropbox mode:** Dropbox account with API access
+- **For Local mode:** No API or account needed!
 
 ## Quick Start
 
@@ -60,6 +61,26 @@ make install
 ```
 
 For detailed setup instructions, see [SETUP.md](SETUP.md)
+
+## Local Mode (No API Required!)
+
+Want to use this with your local files without Dropbox? Super easy:
+
+1. Edit `backend/.env` and set:
+   ```env
+   MODE=local
+   LOCAL_ROOT_PATH=/path/to/your/files
+   ```
+
+2. Run the app:
+   ```bash
+   ./install.sh  # or: make install
+   ./start.sh    # or: make start
+   ```
+
+3. Open `http://localhost:3000` and start organizing your local files!
+
+**See [LOCAL_MODE.md](LOCAL_MODE.md) for complete local mode guide.**
 
 ## Setup Instructions
 
@@ -202,7 +223,13 @@ make help             # Show all available commands
 Edit `backend/.env` to configure:
 
 ```env
-# Dropbox API
+# Mode: "local" or "dropbox"
+MODE=local
+
+# Local Mode (when MODE=local)
+LOCAL_ROOT_PATH=/path/to/your/files
+
+# Dropbox API (when MODE=dropbox)
 DROPBOX_ACCESS_TOKEN=your_token
 
 # Database
@@ -219,9 +246,9 @@ MAX_FILE_SIZE_MB=100            # Max image size to analyze
 CACHE_EXPIRY_HOURS=24           # How long to cache file metadata
 ```
 
-## API Rate Limiting
+## API Rate Limiting (Dropbox Mode Only)
 
-The application respects Dropbox API limits:
+When using Dropbox mode, the application respects Dropbox API limits:
 - Maximum 300 requests per minute (app uses conservative limit of 250)
 - Automatic rate limiting and backoff
 - Progress indicators for long operations
