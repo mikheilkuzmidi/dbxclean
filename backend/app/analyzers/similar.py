@@ -19,11 +19,10 @@ class SimilarImageDetector:
 
     def compute_perceptual_hash(self, image: Image.Image) -> str:
         """Compute perceptual hash for an image"""
-        # Use average hash (fast and effective)
-        # Could also use: phash (more accurate), dhash (gradient-based), whash (wavelet)
+        # Use phash (more discriminative than average_hash for complex scenes)
         try:
-            ahash = imagehash.average_hash(image, hash_size=self.hash_size)
-            return str(ahash)
+            ph = imagehash.phash(image, hash_size=self.hash_size)
+            return str(ph)
         except Exception as e:
             print(f"Error computing hash: {e}")
             return None
@@ -82,7 +81,7 @@ class SimilarImageDetector:
         return similar_groups
 
     def _create_similar_group(self, images: List[FileMetadata]) -> Dict:
-        """Create a similar image group with quality ranking"""
+        """Create a similar image group with quality ranking and distance metrics"""
         # Use the first image's hash as representative
         representative_hash = images[0].perceptual_hash
 
@@ -95,8 +94,14 @@ class SimilarImageDetector:
 
         best_quality = images_sorted[0]
 
+        # 64 bits for an 8x8 hash
+        max_bits = self.hash_size * self.hash_size
+
         files_data = []
         for img in images_sorted:
+            dist = self.hamming_distance(representative_hash, img.perceptual_hash)
+            # Similarity as 0.0–1.0 where 1.0 is identical
+            similarity = max(0.0, 1.0 - (dist / max_bits)) if dist != 999 else 0.0
             files_data.append({
                 "path": img.path,
                 "name": img.name,
@@ -105,6 +110,8 @@ class SimilarImageDetector:
                 "height": img.height,
                 "quality_score": img.quality_score,
                 "is_best_quality": img.path == best_quality.path,
+                "distance": dist,
+                "similarity_score": round(similarity, 3),
             })
 
         return {

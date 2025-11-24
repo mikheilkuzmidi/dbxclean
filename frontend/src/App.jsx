@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, NavLink, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, NavLink, useLocation, Link } from 'react-router-dom';
 import './App.css';
 import { checkConnection } from './api';
 import Dashboard from './pages/Dashboard';

@@ -53,6 +53,7 @@ class DuplicateDetector:
                     "path": f.path,
                     "name": f.name,
                     "size": f.size,
+                    "is_image": f.is_image,
                     "modified": f.modified.isoformat() if f.modified else None,
                     "is_recommended": f.path == recommended,
                 }

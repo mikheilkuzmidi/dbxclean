@@ -12,6 +12,10 @@ class Settings(BaseSettings):
     dropbox_app_key: Optional[str] = None
     dropbox_app_secret: Optional[str] = None
 
+    # Storage mode: "dropbox" or "local"
+    storage_mode: str = "local"
+    local_root: str = "/"
+
     # Database
     database_url: str = "sqlite:///./dropbox_sorter.db"
 

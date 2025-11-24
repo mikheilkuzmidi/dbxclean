@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getSimilar, deleteFiles, formatBytes } from '../api';
+import { getSimilar, deleteFiles, formatBytes, getImageUrl } from '../api';
 
 function Similar() {
   const [data, setData] = useState(null);
@@ -178,6 +178,15 @@ function Similar() {
                 key={file.path}
                 className={`group-file-item ${file.is_best_quality ? 'recommended' : ''}`}
               >
+                {file.path && (
+                  <div className="file-thumbnail" style={{ marginRight: '1rem' }}>
+                    <img
+                      src={getImageUrl(file.path, true)}
+                      alt={file.name}
+                      style={{ width: 96, height: 96, objectFit: 'cover', borderRadius: '6px' }}
+                    />
+                  </div>
+                )}
                 <input
                   type="checkbox"
                   checked={selectedFiles[file.path] || false}
@@ -189,6 +198,11 @@ function Similar() {
                   <div className="file-name">{file.name}</div>
                   <div className="file-meta">
                     {file.path} • {file.width}×{file.height} • {formatBytes(file.size)}
+                    {typeof file.similarity_score === 'number' && (
+                      <span className="ml-2 text-small" style={{ marginLeft: '0.5rem' }}>
+                        Similarity: {Math.round(file.similarity_score * 100)}%
+                      </span>
+                    )}
                     {file.quality_score && (
                       <span
                         style={{

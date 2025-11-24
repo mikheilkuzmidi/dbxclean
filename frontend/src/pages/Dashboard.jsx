@@ -7,6 +7,7 @@ function Dashboard() {
   const [scanning, setScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState(null);
   const [scanPath, setScanPath] = useState('');
+  const [scanError, setScanError] = useState(null);
 
   useEffect(() => {
     loadStats();
@@ -26,6 +27,7 @@ function Dashboard() {
   const handleStartScan = async () => {
     try {
       setScanning(true);
+      setScanError(null);
       const job = await startScan(scanPath, true, true);
       setScanProgress({ ...job, progress: 0 });
 
@@ -37,12 +39,17 @@ function Dashboard() {
         if (status.status === 'completed' || status.status === 'failed') {
           clearInterval(interval);
           setScanning(false);
-          loadStats(); // Reload stats after scan completes
+          if (status.status === 'failed') {
+            setScanError(status.error_message);
+          } else {
+            loadStats(); // Reload stats after scan completes
+          }
         }
       }, 2000);
     } catch (error) {
       console.error('Failed to start scan:', error);
       setScanning(false);
+      setScanError(error.message);
     }
   };
 
@@ -86,6 +93,12 @@ function Dashboard() {
           </button>
         </div>
 
+        {scanError && !scanProgress && (
+          <p className="text-small text-secondary mt-2" style={{ color: 'var(--accent-red)' }}>
+            Error: {scanError}
+          </p>
+        )}
+
         {scanProgress && (
           <div className="mt-2">
             <div className="flex justify-between text-small mb-2">
@@ -98,6 +111,11 @@ function Dashboard() {
                 style={{ width: `${scanProgress.progress}%` }}
               ></div>
             </div>
+            {scanProgress.status === 'failed' && scanProgress.error_message && (
+              <p className="text-small text-secondary mt-2" style={{ color: 'var(--accent-red)' }}>
+                Error: {scanProgress.error_message}
+              </p>
+            )}
             {scanProgress.processed_files > 0 && (
               <p className="text-small text-secondary mt-2">
                 Processed {scanProgress.processed_files} / {scanProgress.total_files} files

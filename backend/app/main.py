@@ -3,6 +3,7 @@
 from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 from typing import List, Optional, Dict
 from datetime import datetime
@@ -14,6 +15,7 @@ import io
 from .config import settings
 from .database import get_db, init_db
 from .dropbox_client import DropboxClient
+from .local_client import LocalClient
 from .models import FileMetadata, AnalysisJob
 from .analyzers.duplicate import DuplicateDetector
 from .analyzers.similar import SimilarImageDetector
@@ -137,13 +139,52 @@ class AnalysisJobResponse(BaseModel):
     message: str
 
 
-# Helper to get Dropbox client
+"""Helper to get storage client (Dropbox or local filesystem)"""
 def get_dropbox_client():
-    """Get Dropbox client instance"""
     try:
-        return DropboxClient()
+        mode = getattr(settings, "storage_mode", "local") or "local"
+        if mode.lower() == "dropbox":
+            return DropboxClient()
+        return LocalClient()
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+def refresh_image_metadata(
+    db: Session,
+    client,
+    analyze_images: bool,
+    similar_detector: SimilarImageDetector,
+    quality_scorer: ImageQualityScorer,
+):
+    """Ensure is_image and perceptual_hash are set for all files"""
+    files = db.query(FileMetadata).all()
+
+    for i, file in enumerate(files):
+        is_image = client.is_image(file.name)
+        file.is_image = is_image
+
+        # Always recompute perceptual hash and quality so changes to hashing
+        # configuration (hash type/size, thresholds) are reflected for all files.
+        if analyze_images and is_image:
+            try:
+                image = client.get_image_for_analysis(file.path)
+                if image:
+                    phash = similar_detector.compute_perceptual_hash(image)
+                    file.perceptual_hash = phash
+
+                    quality = quality_scorer.compute_quality_score(image, file.size)
+                    file.quality_score = quality
+                    file.width = image.size[0]
+                    file.height = image.size[1]
+                    file.format = image.format
+            except Exception as e:
+                print(f"Error refreshing image metadata for {file.path}: {e}")
+
+        if i % 20 == 0:
+            db.commit()
+
+    db.commit()
 
 
 @app.get("/")
@@ -161,7 +202,7 @@ def health_check(db: Session = Depends(get_db)):
     """Health check endpoint"""
     try:
         # Check database
-        db.execute("SELECT 1")
+        db.execute(text("SELECT 1"))
 
         # Check system resources
         cpu_percent = psutil.cpu_percent(interval=0.1)
@@ -224,9 +265,13 @@ async def get_thumbnail(file_id: str, db: Session = Depends(get_db)):
         if not file.is_image:
             raise HTTPException(status_code=400, detail="File is not an image")
 
-        # Get thumbnail from Dropbox
-        client = DropboxClient()
-        await rate_limiter.wait_if_needed()
+        # Get thumbnail from storage backend
+        mode = getattr(settings, "storage_mode", "local") or "local"
+        if mode.lower() == "dropbox":
+            client = DropboxClient()
+            await rate_limiter.wait_if_needed()
+        else:
+            client = LocalClient()
 
         thumbnail_data = client.get_thumbnail(file.path)
 
@@ -237,6 +282,50 @@ async def get_thumbnail(file_id: str, db: Session = Depends(get_db)):
 
     except Exception as e:
         logger.error(f"Error getting thumbnail: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/image")
+async def get_image(path: str, thumb: bool = True, db: Session = Depends(get_db)):
+    """Serve an image (thumbnail by default) for local or Dropbox storage.
+
+    In local mode this reads directly from the filesystem via LocalClient.
+    In Dropbox mode it uses DropboxClient and respects rate limiting.
+    """
+    try:
+        # Prefer DB metadata when available, but fall back to raw path for local files
+        db_file = db.query(FileMetadata).filter(FileMetadata.path == path).first()
+
+        if db_file and not db_file.is_image:
+            raise HTTPException(status_code=400, detail="File is not an image")
+
+        file_path = db_file.path if db_file else path
+
+        mode = getattr(settings, "storage_mode", "local") or "local"
+        use_rate_limit = mode.lower() == "dropbox"
+        client = DropboxClient() if mode.lower() == "dropbox" else LocalClient()
+
+        if thumb:
+            if use_rate_limit:
+                await rate_limiter.wait_if_needed()
+            image_data = client.get_thumbnail(file_path)
+            media_type = "image/jpeg"
+        else:
+            if use_rate_limit:
+                await rate_limiter.wait_if_needed()
+            image_data = client.download_file(file_path)
+            # For simplicity we serve originals as binary stream; JPEG covers most
+            media_type = "image/jpeg"
+
+        if not image_data:
+            raise HTTPException(status_code=404, detail="Image data not available")
+
+        return Response(content=image_data, media_type=media_type)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting image: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -418,8 +507,12 @@ async def delete_files(
     deleted = []
     failed = []
 
+    mode = getattr(settings, "storage_mode", "local") or "local"
+    use_rate_limit = mode.lower() == "dropbox"
+
     for path in request.paths:
-        await rate_limiter.wait_if_needed()
+        if use_rate_limit:
+            await rate_limiter.wait_if_needed()
         try:
             # SAFETY: Extra validation before deletion
             if not path or path == '/':
@@ -552,12 +645,18 @@ async def run_scan_job(
         job.started_at = datetime.utcnow()
         db.commit()
 
-        client = DropboxClient()
         quality_scorer = ImageQualityScorer()
         similar_detector = SimilarImageDetector(db)
 
-        # List all files
+        # List all files from storage backend
         print(f"Scanning folder: {path}")
+        mode = getattr(settings, "storage_mode", "local") or "local"
+        use_rate_limit = mode.lower() == "dropbox"
+        if mode.lower() == "dropbox":
+            client = DropboxClient()
+        else:
+            client = LocalClient()
+
         entries = client.list_folder(path, recursive=recursive)
 
         job.total_files = len(entries)
@@ -565,7 +664,8 @@ async def run_scan_job(
 
         # Process each file
         for i, entry in enumerate(entries):
-            await rate_limiter.wait_if_needed()
+            if use_rate_limit:
+                await rate_limiter.wait_if_needed()
 
             if entry['type'] != 'file':
                 continue
@@ -576,6 +676,8 @@ async def run_scan_job(
             ).first()
 
             is_image = client.is_image(entry['name'])
+            if i < 5:
+                print(f"SCAN DEBUG: {entry['path']} is_image={is_image}")
 
             # Create or update file metadata
             if not existing:
@@ -594,6 +696,7 @@ async def run_scan_job(
                 existing.size = entry['size']
                 existing.content_hash = entry.get('content_hash')
                 existing.modified = datetime.fromisoformat(entry['modified'].replace('Z', '+00:00')) if entry.get('modified') else None
+                existing.is_image = is_image
                 file_meta = existing
 
             # Analyze images
@@ -623,6 +726,9 @@ async def run_scan_job(
                 db.commit()
 
         db.commit()
+
+        # Ensure image flags and hashes are correct for all files
+        refresh_image_metadata(db, client, analyze_images, similar_detector, quality_scorer)
 
         # Run duplicate detection
         print("Finding duplicates...")

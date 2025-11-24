@@ -73,6 +73,12 @@ export const getNamingSuggestions = async (limit = 50) => {
   return response.data;
 };
 
+export const getImageUrl = (path, thumb = true) => {
+  if (!path) return '';
+  const params = new URLSearchParams({ path, thumb: thumb ? 'true' : 'false' });
+  return `${API_BASE}/image?${params.toString()}`;
+};
+
 export const formatBytes = (bytes, decimals = 2) => {
   if (bytes === 0) return '0 Bytes';
 

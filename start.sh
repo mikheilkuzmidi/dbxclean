@@ -5,21 +5,11 @@
 echo "🚀 Starting Dropbox Sorter..."
 echo ""
 
-# Check if .env exists
-if [ ! -f "backend/.env" ]; then
-    echo "❌ Error: backend/.env not found!"
-    echo "Please create it from backend/.env.example and add your Dropbox token."
-    echo ""
-    echo "Run: cp backend/.env.example backend/.env"
-    echo "Then edit backend/.env and add your DROPBOX_ACCESS_TOKEN"
-    exit 1
-fi
-
 # Check if venv exists
 if [ ! -d "backend/venv" ]; then
     echo "⚠️  Python virtual environment not found. Creating..."
     cd backend
-    python -m venv venv
+    python3 -m venv venv
     source venv/bin/activate
     pip install -r requirements.txt
     cd ..

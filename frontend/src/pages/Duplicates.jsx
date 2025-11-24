@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getDuplicates, deleteFiles, formatBytes } from '../api';
+import { getDuplicates, deleteFiles, formatBytes, getImageUrl } from '../api';
 
 function Duplicates() {
   const [data, setData] = useState(null);
@@ -172,6 +172,15 @@ function Duplicates() {
                 key={file.path}
                 className={`group-file-item ${file.is_recommended ? 'recommended' : ''}`}
               >
+                {file.is_image && file.path && (
+                  <div className="file-thumbnail" style={{ marginRight: '1rem' }}>
+                    <img
+                      src={getImageUrl(file.path, true)}
+                      alt={file.name}
+                      style={{ width: 96, height: 96, objectFit: 'cover', borderRadius: '6px' }}
+                    />
+                  </div>
+                )}
                 <input
                   type="checkbox"
                   checked={selectedFiles[file.path] || false}
