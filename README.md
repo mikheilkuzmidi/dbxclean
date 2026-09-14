@@ -334,3 +334,21 @@ For issues or questions, please open an issue on GitHub.
 ---
 
 **Built with ❤️ for people tired of digital clutter**
+
+## The command line tool
+
+    pip install -e .
+    dropbox-sorter
+
+Arrow keys and enter. Nothing is typed in: you walk into a directory, review
+each duplicate group, press space on the ones you want dealt with, and confirm
+once. One copy of every group is always kept, and what is removed is moved into
+quarantine rather than deleted.
+
+    dropbox-sorter --restore   put everything back
+    dropbox-sorter --help      what it does
+
+It has no dependencies. The interface is built on termios from the standard
+library, so there is nothing to install beyond the package itself.
+
+See [SAFETY.md](SAFETY.md) for exactly what it will and will not do.

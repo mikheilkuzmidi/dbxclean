@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dropbox-sorter"
+version = "0.2.0"
+description = "Find duplicate files and set them aside safely, with a keyboard driven interface"
+requires-python = ">=3.10"
+authors = [{ name = "Mikheil Kuzmidi" }]
+# No dependencies on purpose. The interface is built on termios, which is in
+# the standard library, so this installs and runs with nothing to fetch.
+dependencies = []
+
+[project.scripts]
+dropbox-sorter = "dropbox_sorter.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
