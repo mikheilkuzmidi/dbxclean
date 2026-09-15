@@ -88,7 +88,7 @@ def check_node():
 
 
 def main():
-    print("🔍 Checking Dropbox Sorter requirements...\n")
+    print("🔍 Checking dbxclean requirements...\n")
 
     print("--- Python ---")
     py_ok = check_python_version()

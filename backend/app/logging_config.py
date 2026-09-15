@@ -31,7 +31,7 @@ def setup_logging(debug: bool = False):
     console_handler.setFormatter(simple_formatter)
 
     # File handler
-    log_filename = f"logs/dropbox_sorter_{datetime.now().strftime('%Y%m%d')}.log"
+    log_filename = f"logs/dbxclean_{datetime.now().strftime('%Y%m%d')}.log"
     file_handler = logging.FileHandler(log_filename)
     file_handler.setLevel(logging.DEBUG)
     file_handler.setFormatter(detailed_formatter)

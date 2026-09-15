@@ -1,6 +1,6 @@
 # Local Mode Guide
 
-Dropbox Sorter now supports scanning and organizing files on your **local filesystem** without needing a Dropbox account or API access!
+dbxclean now supports scanning and organizing files on your **local filesystem** without needing a Dropbox account or API access!
 
 ## Quick Start for Local Mode
 
@@ -146,7 +146,7 @@ STORAGE_MODE=local
 LOCAL_ROOT=/home/yourname/Pictures
 
 # Database (default is fine)
-DATABASE_URL=sqlite:///./dropbox_sorter.db
+DATABASE_URL=sqlite:///./dbxclean.db
 
 # Server settings
 HOST=0.0.0.0

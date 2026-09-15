@@ -3,7 +3,7 @@ requires = ["setuptools>=69"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "dropbox-sorter"
+name = "dbxclean"
 version = "0.2.0"
 description = "Find duplicate files and set them aside safely, with a keyboard driven interface"
 requires-python = ">=3.10"
@@ -13,7 +13,7 @@ authors = [{ name = "Mikheil Kuzmidi" }]
 dependencies = []
 
 [project.scripts]
-dropbox-sorter = "dropbox_sorter.cli:main"
+dbxclean = "dbxclean.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

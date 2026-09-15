@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     local_root: str = "/"
 
     # Database
-    database_url: str = "sqlite:///./dropbox_sorter.db"
+    database_url: str = "sqlite:///./dbxclean.db"
 
     # Server Configuration
     host: str = "0.0.0.0"

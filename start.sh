@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# Dropbox Sorter - Quick Start Script
+# dbxclean - Quick Start Script
 
-echo "🚀 Starting Dropbox Sorter..."
+echo "🚀 Starting dbxclean..."
 echo ""
 
 # Check if venv exists
@@ -47,7 +47,7 @@ FRONTEND_PID=$!
 cd ..
 
 echo ""
-echo "✅ Dropbox Sorter is running!"
+echo "✅ dbxclean is running!"
 echo ""
 echo "📊 Dashboard: http://localhost:3000"
 echo "🔧 API Docs: http://localhost:8000/docs"

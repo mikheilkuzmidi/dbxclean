@@ -1,3 +1,3 @@
-"""Dropbox Sorter Backend Application"""
+"""dbxclean Backend Application"""
 
 __version__ = "1.0.0"

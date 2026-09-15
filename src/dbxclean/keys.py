@@ -1,7 +1,7 @@
 """
 Raw keyboard input, so the interface is driven by pressing rather than typing.
 
-The sibling project dropbox-backup asks its questions with input() prompts.
+The sibling project dbxpull asks its questions with input() prompts.
 That means typing a path, typing a number, pressing enter. For a tool whose
 whole job is deciding which files to remove, typing is the wrong input method:
 a mistyped index deletes something you did not mean. Arrow keys and enter make

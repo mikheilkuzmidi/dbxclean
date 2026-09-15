@@ -25,7 +25,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
-QUARANTINE_DIRNAME = ".dropbox-sorter-quarantine"
+QUARANTINE_DIRNAME = ".dbxclean-quarantine"
 OPLOG_NAME = "operations.jsonl"
 
 

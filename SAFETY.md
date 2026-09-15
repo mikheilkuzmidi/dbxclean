@@ -7,7 +7,7 @@ matters is that it cannot remove the wrong ones.
 
 **It never deletes.** There is no call to `os.remove`, `unlink` or
 `files_delete_v2` anywhere in the sorter. Files you select are moved into a
-`.dropbox-sorter-quarantine` directory beside them. They are still on disk,
+`.dbxclean-quarantine` directory beside them. They are still on disk,
 still readable, and still yours.
 
 **It never removes the last copy.** A duplicate group always keeps one member.
@@ -26,11 +26,11 @@ somebody's file.
 
 ## Undo
 
-Every move is appended to `.dropbox-sorter-quarantine/operations.jsonl` with the
+Every move is appended to `.dbxclean-quarantine/operations.jsonl` with the
 original path, the new path, the content hash and which copy was kept. To put
 everything back:
 
-    dropbox-sorter --restore
+    dbxclean --restore
 
 ## What changed
 
@@ -39,4 +39,4 @@ Dropbox storage calls `files_delete_v2`, both immediately and irreversibly.
 Nothing in that path checks whether the file being removed is the last surviving
 copy of its contents, so passing every path in a duplicate group would have
 removed all of them. That code is untouched and still present, but it is not
-what the `dropbox-sorter` command runs.
+what the `dbxclean` command runs.

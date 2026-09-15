@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# Comprehensive verification script for Dropbox Sorter
+# Comprehensive verification script for dbxclean
 
-echo "🔍 Dropbox Sorter Verification Script"
+echo "🔍 dbxclean Verification Script"
 echo "======================================"
 echo ""
 

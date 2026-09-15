@@ -7,8 +7,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from dropbox_sorter import keys
-from dropbox_sorter.safety import DuplicateGroup, Quarantine, find_duplicates
+from dbxclean import keys
+from dbxclean.safety import DuplicateGroup, Quarantine, find_duplicates
 
 RESET = "\033[0m"
 DIM = "\033[2m"
@@ -34,7 +34,7 @@ def clear() -> None:
 
 
 def banner(subtitle: str) -> None:
-    print(f"{BOLD}  DROPBOX SORTER{RESET}")
+    print(f"{BOLD}  DBXCLEAN{RESET}")
     print(f"  {DIM}{subtitle}{RESET}\n")
 
 

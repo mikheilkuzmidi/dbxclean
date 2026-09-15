@@ -1,8 +1,8 @@
-# 🚀 QUICK START GUIDE - DROPBOX SORTER
+# 🚀 QUICK START GUIDE - DBXCLEAN
 
 ## ✅ Everything Is Ready!
 
-Your Dropbox Sorter is **100% complete**, **fully tested**, and **SAFE to use**!
+Your dbxclean is **100% complete**, **fully tested**, and **SAFE to use**!
 
 ---
 
@@ -29,7 +29,7 @@ Before you start, make sure you have:
 3. Choose these options:
    - **API**: Scoped access
    - **Access**: Full Dropbox
-   - **Name**: "Dropbox Sorter" (or any name you like)
+   - **Name**: "dbxclean" (or any name you like)
 
 4. Click **"Create app"**
 
@@ -60,7 +60,7 @@ Before you start, make sure you have:
 Open your terminal and run:
 
 ```bash
-cd dropbox-sorter
+cd dbxclean
 
 # Run the automated installation script
 ./install.sh
@@ -128,12 +128,12 @@ If you see any errors, check:
 
 You should see:
 ```
-🚀 Starting Dropbox Sorter...
+🚀 Starting dbxclean...
 ✅ All dependencies ready!
 Starting services...
 📡 Starting backend on http://localhost:8000...
 🎨 Starting frontend on http://localhost:3000...
-✅ Dropbox Sorter is running!
+✅ dbxclean is running!
 📊 Dashboard: http://localhost:3000
 ```
 
@@ -147,7 +147,7 @@ http://localhost:3000
 ```
 
 You should see:
-- ✅ The Dropbox Sorter dashboard
+- ✅ The dbxclean dashboard
 - ✅ Your Dropbox account name in the top-left
 - ✅ A clean, minimalistic interface
 
@@ -420,7 +420,7 @@ cd backend && source venv/bin/activate && python -m app.main
 cd frontend && npm run dev
 
 # View logs
-tail -f backend/logs/dropbox_sorter_*.log
+tail -f backend/logs/dbxclean_*.log
 
 # Check health
 curl http://localhost:8000/api/health
@@ -430,7 +430,7 @@ curl http://localhost:8000/api/health
 
 ## 🎉 You're Ready!
 
-Your Dropbox Sorter is:
+Your dbxclean is:
 - ✅ Fully installed
 - ✅ Configured
 - ✅ Safe to use

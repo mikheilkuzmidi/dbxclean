@@ -106,7 +106,7 @@ function Settings({ connection }) {
 
       {/* About */}
       <div className="card" style={{ marginTop: '2rem', textAlign: 'center' }}>
-        <h3>Dropbox Sorter v1.0.0</h3>
+        <h3>dbxclean v1.0.0</h3>
         <p className="text-secondary text-small">
           Intelligent file deduplication and organization for Dropbox
         </p>

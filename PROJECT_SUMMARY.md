@@ -1,4 +1,4 @@
-# Dropbox Sorter - Complete Project Summary
+# dbxclean - Complete Project Summary
 
 ## 🎉 Project Complete!
 

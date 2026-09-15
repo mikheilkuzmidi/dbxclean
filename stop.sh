@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# Stop Dropbox Sorter services
+# Stop dbxclean services
 
-echo "🛑 Stopping Dropbox Sorter..."
+echo "🛑 Stopping dbxclean..."
 
 if [ -f ".pids" ]; then
     while read pid; do

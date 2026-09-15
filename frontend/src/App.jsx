@@ -56,7 +56,7 @@ function App() {
       <div className="app">
         <nav className="sidebar">
           <div className="sidebar-header">
-            <h2>Dropbox Sorter</h2>
+            <h2>dbxclean</h2>
             <p className="text-small text-secondary">{connection.name}</p>
           </div>
 

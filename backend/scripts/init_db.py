@@ -23,7 +23,7 @@ def check_tables():
 
 
 def main():
-    print("🗄️  Initializing Dropbox Sorter database...")
+    print("🗄️  Initializing dbxclean database...")
 
     # Check existing tables
     existing_tables = check_tables()

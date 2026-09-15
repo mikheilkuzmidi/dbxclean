@@ -1,4 +1,4 @@
-# Dropbox Sorter
+# dbxclean
 
 An intelligent file deduplication and organization tool for Dropbox that helps you clean up terabytes of data efficiently.
 
@@ -16,7 +16,7 @@ An intelligent file deduplication and organization tool for Dropbox that helps y
 ## Architecture
 
 ```
-dropbox-sorter/
+dbxclean/
 ├── backend/          # Python FastAPI backend
 │   ├── app/
 │   │   ├── analyzers/  # Duplicate, similar, quality, naming analyzers
@@ -42,7 +42,7 @@ The fastest way to get started:
 
 ```bash
 # Clone or download the repository
-cd dropbox-sorter
+cd dbxclean
 
 # Run the installation script
 ./install.sh
@@ -68,7 +68,7 @@ For detailed setup instructions, see [SETUP.md](SETUP.md)
 1. Go to [Dropbox App Console](https://www.dropbox.com/developers/apps)
 2. Click "Create app"
 3. Choose "Scoped access" and "Full Dropbox" access
-4. Name your app (e.g., "Dropbox Sorter")
+4. Name your app (e.g., "dbxclean")
 5. Go to the "Permissions" tab and enable:
    - `files.metadata.read`
    - `files.content.read`
@@ -131,7 +131,7 @@ Frontend will run on `http://localhost:3000`
 
 ### 5. Open in Browser
 
-Navigate to `http://localhost:3000` and start using Dropbox Sorter!
+Navigate to `http://localhost:3000` and start using dbxclean!
 
 ## Usage Guide
 
@@ -206,7 +206,7 @@ Edit `backend/.env` to configure:
 DROPBOX_ACCESS_TOKEN=your_token
 
 # Database
-DATABASE_URL=sqlite:///./dropbox_sorter.db
+DATABASE_URL=sqlite:///./dbxclean.db
 
 # Server
 HOST=0.0.0.0
@@ -338,15 +338,15 @@ For issues or questions, please open an issue on GitHub.
 ## The command line tool
 
     pip install -e .
-    dropbox-sorter
+    dbxclean
 
 Arrow keys and enter. Nothing is typed in: you walk into a directory, review
 each duplicate group, press space on the ones you want dealt with, and confirm
 once. One copy of every group is always kept, and what is removed is moved into
 quarantine rather than deleted.
 
-    dropbox-sorter --restore   put everything back
-    dropbox-sorter --help      what it does
+    dbxclean --restore   put everything back
+    dbxclean --help      what it does
 
 It has no dependencies. The interface is built on termios from the standard
 library, so there is nothing to install beyond the package itself.

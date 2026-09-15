@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from dropbox_sorter.safety import DuplicateGroup, Quarantine, content_hash, find_duplicates
+from dbxclean.safety import DuplicateGroup, Quarantine, content_hash, find_duplicates
 
 
 @pytest.fixture

@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# Installation script for Dropbox Sorter
+# Installation script for dbxclean
 
-echo "🚀 Dropbox Sorter Installation"
+echo "🚀 dbxclean Installation"
 echo "==============================="
 echo ""
 

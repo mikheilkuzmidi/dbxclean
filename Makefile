@@ -1,7 +1,7 @@
 .PHONY: help install verify start stop clean test backend frontend
 
 help:
-	@echo "Dropbox Sorter - Available Commands"
+	@echo "dbxclean - Available Commands"
 	@echo "===================================="
 	@echo ""
 	@echo "  make install    - Install all dependencies"
@@ -15,7 +15,7 @@ help:
 	@echo ""
 
 install:
-	@echo "🚀 Installing Dropbox Sorter..."
+	@echo "🚀 Installing dbxclean..."
 	@chmod +x install.sh
 	@./install.sh
 
@@ -25,7 +25,7 @@ verify:
 	@./verify.sh
 
 start:
-	@echo "🚀 Starting Dropbox Sorter..."
+	@echo "🚀 Starting dbxclean..."
 	@chmod +x start.sh
 	@./start.sh
 

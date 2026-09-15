@@ -11,15 +11,15 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from dropbox_sorter import keys, tui
-from dropbox_sorter.safety import Quarantine, find_duplicates
+from dbxclean import keys, tui
+from dbxclean.safety import Quarantine, find_duplicates
 
-USAGE = """dropbox-sorter - find duplicate files and set them aside safely
+USAGE = """dbxclean - find duplicate files and set them aside safely
 
 Usage:
-  dropbox-sorter            Start the interface, choose a directory, review
-  dropbox-sorter --help     Show this message
-  dropbox-sorter --restore  Put everything back out of quarantine
+  dbxclean            Start the interface, choose a directory, review
+  dbxclean --help     Show this message
+  dbxclean --restore  Put everything back out of quarantine
 
 Nothing is ever deleted. Duplicates you select are moved into a quarantine
 directory beside the files, and every move is logged so it can be undone. One
@@ -96,14 +96,14 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  {moved} files moved into {quarantine.dir}")
             print(f"  One copy of every group was kept.")
             print(f"  Log: {quarantine.oplog}")
-            print(f"\n  Undo all of it with: dropbox-sorter --restore\n")
+            print(f"\n  Undo all of it with: dbxclean --restore\n")
             return 0
 
     except keys.NotATerminal:
         # Piped, redirected, or running under CI. A menu cannot be driven there,
         # and a stack trace would make this look like a crash.
         print(
-            "dropbox-sorter is an interactive tool and needs a terminal.\n"
+            "dbxclean is an interactive tool and needs a terminal.\n"
             "Run it directly rather than through a pipe or redirect, "
             "or use --help to see what it does.",
             file=sys.stderr,

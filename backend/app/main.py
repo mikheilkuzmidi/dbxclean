@@ -71,15 +71,15 @@ rate_limiter = RateLimiter(RATE_LIMIT_REQUESTS, RATE_LIMIT_WINDOW)
 async def lifespan(app: FastAPI):
     """Initialize database on startup"""
     setup_logging(settings.debug)
-    logger.info("Starting Dropbox Sorter...")
+    logger.info("Starting dbxclean...")
     init_db()
     logger.info("Database initialized")
     yield
-    logger.info("Shutting down Dropbox Sorter...")
+    logger.info("Shutting down dbxclean...")
 
 
 app = FastAPI(
-    title="Dropbox Sorter",
+    title="dbxclean",
     description="Intelligent file deduplication and organization for Dropbox",
     version="1.0.0",
     lifespan=lifespan
@@ -191,7 +191,7 @@ def refresh_image_metadata(
 def read_root():
     """API root endpoint"""
     return {
-        "name": "Dropbox Sorter API",
+        "name": "dbxclean API",
         "version": "1.0.0",
         "status": "running"
     }

@@ -1,4 +1,4 @@
-# Contributing to Dropbox Sorter
+# Contributing to dbxclean
 
 Thank you for your interest in contributing! This document provides guidelines for contributing to the project.
 
@@ -29,7 +29,7 @@ Thank you for your interest in contributing! This document provides guidelines f
 ## Project Structure
 
 ```
-dropbox-sorter/
+dbxclean/
 ├── backend/
 │   ├── app/
 │   │   ├── analyzers/      # Analysis modules

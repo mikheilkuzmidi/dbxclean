@@ -1,6 +1,6 @@
 # Detailed Setup Guide
 
-This guide will walk you through setting up Dropbox Sorter step by step.
+This guide will walk you through setting up dbxclean step by step.
 
 ## Prerequisites Check
 
@@ -27,7 +27,7 @@ If you haven't already:
 
 ```bash
 git clone <repository-url>
-cd dropbox-sorter
+cd dbxclean
 ```
 
 ## Step 2: Dropbox API Setup
@@ -39,7 +39,7 @@ cd dropbox-sorter
 3. Choose these options:
    - API: Scoped access
    - Access: Full Dropbox
-   - Name: "Dropbox Sorter" (or your preferred name)
+   - Name: "dbxclean" (or your preferred name)
 4. Click "Create app"
 
 ### Configure Permissions
@@ -97,7 +97,7 @@ Update these values:
 DROPBOX_ACCESS_TOKEN=sl.your_actual_token_here
 
 # Optional: customize these if needed
-DATABASE_URL=sqlite:///./dropbox_sorter.db
+DATABASE_URL=sqlite:///./dbxclean.db
 HOST=0.0.0.0
 PORT=8000
 DEBUG=True
@@ -147,7 +147,7 @@ Open a browser and visit: http://localhost:8000
 You should see:
 ```json
 {
-  "name": "Dropbox Sorter API",
+  "name": "dbxclean API",
   "version": "1.0.0",
   "status": "running"
 }
@@ -176,7 +176,7 @@ VITE v5.0.x  ready in xxx ms
 
 1. Open your browser
 2. Navigate to http://localhost:3000
-3. You should see the Dropbox Sorter interface
+3. You should see the dbxclean interface
 
 If you see a connection error:
 - Check that your Dropbox token is correct in `.env`
