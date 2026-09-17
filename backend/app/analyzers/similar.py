@@ -100,7 +100,7 @@ class SimilarImageDetector:
         files_data = []
         for img in images_sorted:
             dist = self.hamming_distance(representative_hash, img.perceptual_hash)
-            # Similarity as 0.0–1.0 where 1.0 is identical
+            # Similarity as 0.0 to 1.0 where 1.0 is identical
             similarity = max(0.0, 1.0 - (dist / max_bits)) if dist != 999 else 0.0
             files_data.append({
                 "path": img.path,
