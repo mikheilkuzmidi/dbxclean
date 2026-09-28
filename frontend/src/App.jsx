@@ -7,6 +7,7 @@ import Duplicates from './pages/Duplicates';
 import Similar from './pages/Similar';
 import Files from './pages/Files';
 import Settings from './pages/Settings';
+import Recovery from './pages/Recovery';
 import NotFound from './pages/NotFound';
 
 function App() {
@@ -34,7 +35,7 @@ function App() {
     return (
       <div className="loading-screen">
         <div className="spinner"></div>
-        <p>Connecting to Dropbox...</p>
+        <p>Connecting to storage...</p>
       </div>
     );
   }
@@ -43,7 +44,7 @@ function App() {
     return (
       <div className="error-screen">
         <h1>Connection Error</h1>
-        <p>Unable to connect to Dropbox. Please configure your access token.</p>
+        <p>Unable to connect to storage. Check the backend configuration.</p>
         {connection?.error && <p className="text-secondary">{connection.error}</p>}
         <Link to="/settings">
           <button className="btn-primary">Go to Settings</button>
@@ -77,6 +78,10 @@ function App() {
               <span className="nav-icon">📁</span>
               All Files
             </NavLink>
+            <NavLink to="/recovery" className={({ isActive }) => isActive ? "nav-item active" : "nav-item"}>
+              <span className="nav-icon">↩</span>
+              Recovery
+            </NavLink>
             <NavLink to="/settings" className={({ isActive }) => isActive ? "nav-item active" : "nav-item"}>
               <span className="nav-icon">⚙️</span>
               Settings
@@ -85,17 +90,18 @@ function App() {
 
           <div className="sidebar-footer">
             <p className="text-tiny text-secondary">
-              v1.0.0
+              dbxclean
             </p>
           </div>
         </nav>
 
         <main className="main-content">
           <Routes>
-            <Route path="/" element={<Dashboard />} />
+            <Route path="/" element={<Dashboard connection={connection} />} />
             <Route path="/duplicates" element={<Duplicates />} />
             <Route path="/similar" element={<Similar />} />
             <Route path="/files" element={<Files />} />
+            <Route path="/recovery" element={<Recovery />} />
             <Route path="/settings" element={<Settings connection={connection} />} />
             <Route path="*" element={<NotFound />} />
           </Routes>

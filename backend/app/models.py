@@ -1,6 +1,6 @@
 """Database models"""
 
-from sqlalchemy import Column, String, Integer, Float, DateTime, Boolean, Text, JSON
+from sqlalchemy import Column, String, Integer, Float, DateTime, Boolean, Text, JSON, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime
 
@@ -89,3 +89,28 @@ class AnalysisJob(Base):
     started_at = Column(DateTime, nullable=True)
     completed_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class ScanSeen(Base):
+    """Paths observed in one scan, stored on disk instead of in process memory."""
+    __tablename__ = "scan_seen"
+
+    job_id = Column(Integer, ForeignKey("analysis_jobs.id"), primary_key=True)
+    path = Column(String, primary_key=True)
+
+
+class RecoveryRecord(Base):
+    """A file moved out of the active set and eligible for restoration."""
+    __tablename__ = "recovery_records"
+
+    id = Column(Integer, primary_key=True)
+    backend = Column(String, nullable=False)
+    original_path = Column(String, nullable=False)
+    recovery_path = Column(String, nullable=True)
+    revision = Column(String, nullable=True)
+    content_hash = Column(String, nullable=True)
+    size = Column(Integer, nullable=True)
+    status = Column(String, nullable=False, default="pending")
+    error = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    restored_at = Column(DateTime, nullable=True)

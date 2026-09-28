@@ -6,7 +6,6 @@ destroyed data: it deleted by path with no content check, kept no copy, and
 unlinked rather than moved.
 """
 
-import shutil
 from pathlib import Path
 
 import pytest
@@ -82,6 +81,18 @@ def test_restore_puts_everything_back(tree: Path):
     assert not any(p.exists() for p in originals)
     quarantine.restore_all()
     assert all(p.exists() for p in originals), "restore must return every file"
+
+
+def test_restore_refuses_to_replace_new_file(tree: Path):
+    group = find_duplicates(tree)[0]
+    original = group.removable[0]
+    quarantine = Quarantine(tree)
+    target = quarantine.hold(original, digest=group.digest, keeper=group.keeper)
+    original.write_text("new file")
+    with pytest.raises(FileExistsError):
+        quarantine.restore_one(target)
+    assert original.read_text() == "new file"
+    assert target.read_text() == "identical content here"
 
 
 def test_a_second_scan_ignores_quarantine(tree: Path):

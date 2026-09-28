@@ -10,8 +10,8 @@ import subprocess
 def check_python_version():
     """Check Python version"""
     version = sys.version_info
-    if version.major < 3 or (version.major == 3 and version.minor < 9):
-        print(f"❌ Python 3.9+ required, found {version.major}.{version.minor}.{version.micro}")
+    if version.major < 3 or (version.major == 3 and version.minor < 10):
+        print(f"❌ Python 3.10+ required, found {version.major}.{version.minor}.{version.micro}")
         return False
     print(f"✅ Python {version.major}.{version.minor}.{version.micro}")
     return True
@@ -55,6 +55,7 @@ def check_packages():
 def check_env_file():
     """Check if .env file exists"""
     import os
+    from pathlib import Path
     if os.path.exists('.env'):
         print("✅ .env file found")
 
@@ -62,11 +63,21 @@ def check_env_file():
         from dotenv import load_dotenv
         load_dotenv()
 
-        token = os.getenv('DROPBOX_ACCESS_TOKEN')
-        if token and len(token) > 10:
-            print("✅ DROPBOX_ACCESS_TOKEN configured")
+        mode = os.getenv('STORAGE_MODE', 'dropbox').lower()
+        if mode == 'local':
+            root = os.getenv('LOCAL_ROOT', '')
+            if not root or not Path(root).expanduser().is_dir():
+                print("❌ LOCAL_ROOT must name an existing directory")
+                return False
+            print(f"✅ Local root: {root}")
+        elif mode == 'dropbox':
+            token = os.getenv('DROPBOX_ACCESS_TOKEN')
+            if not token or token.startswith('your_'):
+                print("❌ Set DROPBOX_ACCESS_TOKEN for Dropbox mode")
+                return False
+            print("✅ Dropbox access token configured")
         else:
-            print("⚠️  DROPBOX_ACCESS_TOKEN not set or invalid")
+            print("❌ STORAGE_MODE must be local or dropbox")
             return False
 
         return True
@@ -116,7 +127,7 @@ def main():
         if not env_ok:
             print(f"\nConfigure environment:")
             print(f"  cp .env.example .env")
-            print(f"  # Edit .env and add your DROPBOX_ACCESS_TOKEN")
+            print(f"  # Set LOCAL_ROOT for local mode, or set a token for Dropbox mode")
 
         return 1
 

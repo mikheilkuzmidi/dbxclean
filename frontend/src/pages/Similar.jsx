@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getSimilar, deleteFiles, formatBytes, getImageUrl } from '../api';
+import { getSimilar, trashFiles, formatBytes, getImageUrl } from '../api';
 
 function Similar() {
   const [data, setData] = useState(null);
@@ -52,8 +52,8 @@ function Similar() {
     // SAFETY: Extra confirmation for large deletions
     if (pathsToDelete.length > 50) {
       const reallyConfirm = window.confirm(
-        `⚠️ WARNING: You are about to delete ${pathsToDelete.length} images!\n\n` +
-        `This is a LARGE deletion. Are you absolutely sure?\n\n` +
+        `Move ${pathsToDelete.length} images into recovery?\n\n` +
+        `This is a large selection.\n\n` +
         `Click OK to proceed, or Cancel to go back.`
       );
       if (!reallyConfirm) {
@@ -63,34 +63,34 @@ function Similar() {
 
     // SAFETY: Check for 100 file limit
     if (pathsToDelete.length > 100) {
-      alert(`⚠️ SAFETY LIMIT: Cannot delete more than 100 files at once.\n\nYou selected ${pathsToDelete.length} images.\n\nPlease delete in smaller batches for safety.`);
+      alert(`You can move up to 100 images at once. You selected ${pathsToDelete.length}.`);
       return;
     }
 
     try {
       setDeleting(true);
-      const result = await deleteFiles(pathsToDelete, true);
+      const result = await trashFiles(pathsToDelete, true);
 
       if (result.failed_count > 0) {
         alert(
-          `Deletion completed:\n\n` +
-          `✅ Successfully deleted: ${result.deleted_count} images\n` +
+          `Recovery move completed:\n\n` +
+          `Moved: ${result.trashed_count} images\n` +
           `❌ Failed: ${result.failed_count} images\n\n` +
           `Check the console for details about failed deletions.`
         );
-        console.error('Failed deletions:', result.failed);
+        console.error('Failed moves:', result.failed);
       } else {
-        alert(`✅ Successfully deleted ${result.deleted_count} images!`);
+        alert(`Moved ${result.trashed_count} images into recovery.`);
       }
 
-      if (result.deleted_count > 0) {
+      if (result.trashed_count > 0) {
         loadSimilar(); // Reload data
       }
 
       setShowConfirm(false);
     } catch (error) {
-      console.error('Failed to delete files:', error);
-      alert(`❌ Error: ${error.message}\n\nNo files were deleted. Please try again.`);
+      console.error('Failed to move images:', error);
+      alert(`Error: ${error.response?.data?.detail || error.message}`);
     } finally {
       setDeleting(false);
     }
@@ -145,7 +145,7 @@ function Similar() {
       <div className="card mb-4">
         <div className="flex justify-between items-center">
           <div>
-            <h3>Space Can Save: {formatBytes(data.stats.space_can_save_bytes)}</h3>
+            <h3>Selected Copy Bytes: {formatBytes(data.stats.space_can_save_bytes)}</h3>
             <p className="text-small text-secondary">
               {selectedCount} files selected ({formatBytes(selectedSize)})
             </p>
@@ -155,7 +155,7 @@ function Similar() {
             onClick={() => setShowConfirm(true)}
             disabled={selectedCount === 0 || deleting}
           >
-            Delete Selected
+            Move Selected to Recovery
           </button>
         </div>
       </div>
@@ -232,14 +232,14 @@ function Similar() {
         <div className="modal-overlay" onClick={() => setShowConfirm(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>⚠️ Confirm Deletion</h2>
+              <h2>Confirm Recovery Move</h2>
             </div>
             <div>
               <p style={{ fontSize: '1.1rem', fontWeight: 600 }}>
-                Are you sure you want to delete {selectedCount} similar images?
+                Move {selectedCount} similar images into recovery?
               </p>
               <p className="text-secondary text-small mt-2">
-                This will free up {formatBytes(selectedSize)} of space.
+                Selected images total {formatBytes(selectedSize)}.
               </p>
               <div style={{
                 backgroundColor: 'var(--bg-tertiary)',
@@ -249,10 +249,10 @@ function Similar() {
                 border: '2px solid var(--accent-red)'
               }}>
                 <p className="text-small" style={{ color: 'var(--accent-red)', fontWeight: 600 }}>
-                  ⚠️ THIS ACTION CANNOT BE UNDONE!
+                  These images can be restored from the Recovery page.
                 </p>
                 <p className="text-small mt-2">
-                  The images will be permanently deleted from your Dropbox.
+                  Dropbox recovery lasts for your account retention period. Local images remain in quarantine.
                 </p>
                 <p className="text-small mt-2" style={{ color: 'var(--accent-green)', fontWeight: 600 }}>
                   ✅ The best quality version of each image will be kept.
@@ -264,7 +264,7 @@ function Similar() {
                 )}
               </div>
               <p className="text-small text-secondary mt-2">
-                ℹ️ Best quality images (highlighted) are protected and will NOT be deleted.
+                Best quality images (highlighted) are protected.
               </p>
             </div>
             <div className="modal-footer">
@@ -273,14 +273,14 @@ function Similar() {
                 onClick={() => setShowConfirm(false)}
                 disabled={deleting}
               >
-                Cancel - Don't Delete
+                Cancel
               </button>
               <button
                 className="btn-danger"
                 onClick={handleDeleteSelected}
                 disabled={deleting}
               >
-                {deleting ? 'Deleting...' : `Yes, Delete ${selectedCount} Images`}
+                {deleting ? 'Moving...' : `Move ${selectedCount} Images`}
               </button>
             </div>
           </div>

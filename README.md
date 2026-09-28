@@ -1,100 +1,55 @@
 # dbxclean
 
-Find duplicate files and set them aside safely, with a keyboard driven
-interface. Nothing is ever deleted.
+dbxclean finds exact duplicate files and lets you review what to set aside. It has a keyboard driven command line interface for local files and a web app for Dropbox or local folders.
 
-![Point it at a directory, choose what to set aside, then put all of it back](docs/dbxclean.gif)
+![Directory selection, duplicate review, quarantine, and restore](docs/dbxclean.gif)
 
-That is a real run: 28 files in five duplicate groups, the review screen,
-the move into quarantine, and then `--restore` putting every file back where it
-came from.
+The recording shows a local run: 28 files in five duplicate groups, a review, a move into quarantine, and restoration to the original paths.
 
-## Install and run
+## Command line interface
 
-There are no dependencies. The interface is built on `termios` from the
-standard library, so nothing is fetched beyond the package itself. Python 3.10
-or newer.
+The CLI needs Python 3.10 or newer and only uses the standard library at runtime.
 
 ```bash
-pip install -e .
+python3 -m pip install -e .
 dbxclean
 ```
 
-Arrow keys and enter, nothing typed in. You walk into a directory, review each
-duplicate group, press space on the ones you want dealt with, and confirm once.
+Choose a directory with the arrow keys and Enter. Press Space to select duplicate groups, then confirm the move. No file moves during scanning or review. The CLI groups byte identical files using SHA-256, with size as a fast first check. It always leaves one deterministic copy in place and moves selected extras into `.dbxclean-quarantine` under the chosen directory. It logs each move.
 
 ```bash
-dbxclean --restore   put everything back
-dbxclean --help      what it does
+dbxclean --restore /path/to/chosen/directory
 ```
 
-## What it will not do
+With no directory argument, `--restore` uses the current directory. Restoration refuses to overwrite a path that now exists.
 
-The whole point of a deduplicator is that it cannot remove the wrong file, so
-these are the rules it is built around.
+## Web app
 
-**It never deletes.** There is no `os.remove` or `unlink` anywhere in it. Files
-you select are moved into a `.dbxclean-quarantine` directory beside them, and
-every move is logged, which is what makes `--restore` possible.
+The web app uses FastAPI and React. In Dropbox mode, the default scan reads paginated file metadata and compares Dropbox content hashes. It does not download file contents for exact duplicate detection. Similar image analysis is optional and reads image data or thumbnails. In local mode, the scan reads local files to calculate content hashes. Results are stored in SQLite and duplicate groups are paginated in the browser.
 
-**It never removes the last copy.** A duplicate group always keeps one member,
-chosen deterministically by shallowest path, then oldest, then alphabetical, so
-a second run makes the same choice rather than a new one.
+A confirmed cleanup of a reviewed file moves it into recovery. Dropbox mode uses Dropbox Deleted files and can restore a recorded revision while it remains within the account's retention period. Local mode moves the file into `.dbxclean-quarantine/web` and restores it from there. The server checks current metadata, rejects stale or unrelated selections, protects recommended files, and refuses to overwrite a destination during rename or restore. The old `/api/delete` route uses this same recovery flow.
 
-**It never acts without being told to.** Starting the tool scans and shows you
-what it found. Nothing moves until you select groups and then confirm a prompt
-that names how many files are affected and defaults to no.
+See [web setup](docs/web-app.md), [local mode](LOCAL_MODE.md), and [safety rules](SAFETY.md).
 
-**It never guesses what a duplicate is.** Files are grouped by SHA-256 of their
-contents. Size is compared first only because it is free, and files that agree
-on size but differ in bytes are not grouped.
+## Verification
 
-[SAFETY.md](SAFETY.md) spells out the rest.
-
-## Layout
-
-```
-src/dbxclean/cli.py     entry point, --restore and --help
-src/dbxclean/tui.py     the directory picker and the review screen
-src/dbxclean/safety.py  hashing, grouping, the quarantine and the undo log
-src/dbxclean/keys.py    terminal bytes to key names
-tests/test_safety.py    the quarantine round trip and the survivor rule
-```
-
-## Tests
+The tests use disposable local files and a simulated Dropbox client. No Dropbox app, token, or personal files are needed.
 
 ```bash
-pip install -e . pytest
-pytest
+python3 -m pip install -e .
+python3 -m pip install -r backend/requirements.txt pytest
+npm --prefix frontend ci
+./verify.sh
 ```
 
-Nine tests. They cover the round trip that matters: that a group always keeps a
-member, that what is set aside is moved rather than removed, and that restoring
-puts every path back exactly where it was.
+The separate 700,000-entry synthetic scan can be run with:
 
-## The web app
+```bash
+PYTHONPATH=src python3 -m backend.tests.large_scan_check
+```
 
-This repository also holds the first version of the idea, which is a browser
-one: a FastAPI backend and a React frontend that work against the Dropbox API
-instead of a local directory, with perceptual hashing for similar images,
-quality scoring and renaming suggestions. It needs a Dropbox token, a database
-and two processes.
-
-Its default scan finds exact duplicates from Dropbox content hashes in file
-metadata, without downloading the files. Similar-image analysis is an optional
-checkbox because it needs image data or thumbnails.
-
-It is documented separately, in [docs/web-app.md](docs/web-app.md), along with
-[SETUP.md](SETUP.md) and [LOCAL_MODE.md](LOCAL_MODE.md).
-
-## Contributing
-
-This is a personal project. Feel free to fork and modify for your needs.
+The credential-free checks do not verify an operation against a live Dropbox account.
 
 ## License
 
 MIT. See [LICENSE](LICENSE).
-
-## Support
-
-For issues or questions, please open an issue on GitHub.

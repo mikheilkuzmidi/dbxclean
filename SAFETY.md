@@ -1,42 +1,21 @@
 # Safety
 
-This tool exists to remove duplicate files, so the only thing that really
-matters is that it cannot remove the wrong ones.
+Both interfaces require a review and confirmation before they move a file. They keep a recommended copy from each reviewed exact duplicate group. The web app also protects the recommended image in a similar-image group. The server checks these rules again when it receives a request, so changing a browser checkbox or calling the API directly cannot bypass them.
 
-## What it will not do
+## Command line interface
 
-**It never deletes.** There is no call to `os.remove`, `unlink` or
-`files_delete_v2` anywhere in the sorter. Files you select are moved into a
-`.dbxclean-quarantine` directory beside them. They are still on disk,
-still readable, and still yours.
+The CLI compares local file contents using SHA-256 after filtering by size. It chooses one copy to keep by path depth, modification time, and name. Selected extras move into `.dbxclean-quarantine` under the chosen root. The log records each original and quarantine path. Restore them with `dbxclean --restore /path/to/chosen/directory`. If the original path already exists, restore stops rather than replacing it.
 
-**It never removes the last copy.** A duplicate group always keeps one member.
-The survivor is chosen deterministically, by shallowest path, then oldest, then
-alphabetical, so a second run makes the same choice rather than a new one.
+## Web app
 
-**It never acts without being told to.** Starting the tool scans and shows you
-what it found. Nothing moves until you select groups and then confirm a prompt
-that names how many files are affected and defaults to no.
+The default Dropbox scan compares provider content hashes from metadata. It does not download file contents. Local web scans hash local files. Similar-image analysis is optional and reads image data or thumbnails. A matching Dropbox content hash is the exact-duplicate signal, while perceptual similarity is a separate review and does not imply byte identity.
 
-**It never guesses what a duplicate is.** Files are grouped by SHA-256 of their
-contents. Size is compared first only because it is free, and files that agree
-on size but differ in bytes are not grouped. Matching on name or size alone
-would call two unrelated files identical, and the cost of that mistake here is
-somebody's file.
+Before moving a selected file, the API verifies that it still belongs to a reviewed group and that its current size, revision, and content hash match the scan. It refuses unknown paths, stale files, the protected recommended copy, and a request that would take every member of a group. The check also applies to the compatibility `/api/delete` route.
 
-## Undo
+In local mode, selected files move to `.dbxclean-quarantine/web` under the configured root. They still occupy disk space until the user manages that directory. The Recovery page moves them back, but never overwrites an existing destination.
 
-Every move is appended to `.dbxclean-quarantine/operations.jsonl` with the
-original path, the new path, the content hash and which copy was kept. To put
-everything back:
+In Dropbox mode, the app calls Dropbox's delete operation, which places selected files in Dropbox Deleted files. The Recovery page uses the recorded revision to request restoration. Dropbox recovery is limited by the account's [file retention period](https://help.dropbox.com/account-settings/data-retention-policy). A file may become unrecoverable after that period. The app checks that the original path is free before restoration and reports any Dropbox error.
 
-    dbxclean --restore
+Renames also require confirmation. The API verifies the source has not changed since the scan and rejects an existing destination.
 
-## What changed
-
-The web API in `backend/` deletes for real: local storage calls `os.remove` and
-Dropbox storage calls `files_delete_v2`, both immediately and irreversibly.
-Nothing in that path checks whether the file being removed is the last surviving
-copy of its contents, so passing every path in a duplicate group would have
-removed all of them. That code is untouched and still present, but it is not
-what the `dbxclean` command runs.
+These safeguards are covered by credential-free tests and local round trips. A live Dropbox-account operation has not been tested without user credentials.

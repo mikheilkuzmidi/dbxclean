@@ -19,7 +19,7 @@ fi
 if [ ! -d "frontend/node_modules" ]; then
     echo "⚠️  Node modules not found. Installing..."
     cd frontend
-    npm install
+    npm ci
     cd ..
 fi
 
@@ -27,6 +27,11 @@ echo "✅ All dependencies ready!"
 echo ""
 echo "Starting services..."
 echo ""
+
+cd backend
+source venv/bin/activate
+python scripts/check_requirements.py || exit 1
+cd ..
 
 # Start backend in background
 echo "📡 Starting backend on http://localhost:8000..."

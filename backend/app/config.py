@@ -14,13 +14,13 @@ class Settings(BaseSettings):
 
     # Storage mode: "dropbox" or "local"
     storage_mode: str = "dropbox"
-    local_root: str = "/"
+    local_root: Optional[str] = None
 
     # Database
     database_url: str = "sqlite:///./dbxclean.db"
 
     # Server Configuration
-    host: str = "0.0.0.0"
+    host: str = "127.0.0.1"
     port: int = 8000
     debug: bool = True
 

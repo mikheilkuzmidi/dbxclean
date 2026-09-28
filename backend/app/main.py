@@ -3,10 +3,11 @@
 from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from sqlalchemy import text
+from sqlalchemy import text, func
 from sqlalchemy.orm import Session
 from typing import List, Optional, Dict
 from datetime import datetime
+from uuid import uuid4
 import asyncio
 from contextlib import asynccontextmanager
 import psutil
@@ -16,7 +17,7 @@ from .config import settings
 from .database import get_db, init_db
 from .dropbox_client import DropboxClient
 from .local_client import LocalClient
-from .models import FileMetadata, AnalysisJob
+from .models import FileMetadata, AnalysisJob, DuplicateGroup, SimilarGroup, ScanSeen, RecoveryRecord
 from .analyzers.duplicate import DuplicateDetector
 from .analyzers.similar import SimilarImageDetector
 from .analyzers.quality import ImageQualityScorer
@@ -123,6 +124,11 @@ class DeleteRequest(BaseModel):
         return validate_file_paths(v)
 
 
+class RestoreRequest(BaseModel):
+    ids: List[int]
+    confirm: bool = False
+
+
 class RenameRequest(BaseModel):
     operations: List[Dict[str, str]]  # [{"from": "old_path", "to": "new_path"}]
     confirm: bool = False  # Must be True to actually rename
@@ -148,43 +154,6 @@ def get_dropbox_client():
         return LocalClient()
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-
-
-def refresh_image_metadata(
-    db: Session,
-    client,
-    analyze_images: bool,
-    similar_detector: SimilarImageDetector,
-    quality_scorer: ImageQualityScorer,
-):
-    """Ensure is_image and perceptual_hash are set for all files"""
-    files = db.query(FileMetadata).all()
-
-    for i, file in enumerate(files):
-        is_image = client.is_image(file.name)
-        file.is_image = is_image
-
-        # Always recompute perceptual hash and quality so changes to hashing
-        # configuration (hash type/size, thresholds) are reflected for all files.
-        if analyze_images and is_image:
-            try:
-                image = client.get_image_for_analysis(file.path)
-                if image:
-                    phash = similar_detector.compute_perceptual_hash(image)
-                    file.perceptual_hash = phash
-
-                    quality = quality_scorer.compute_quality_score(image, file.size)
-                    file.quality_score = quality
-                    file.width = image.size[0]
-                    file.height = image.size[1]
-                    file.format = image.format
-            except Exception as e:
-                print(f"Error refreshing image metadata for {file.path}: {e}")
-
-        if i % 20 == 0:
-            db.commit()
-
-    db.commit()
 
 
 @app.get("/")
@@ -280,6 +249,8 @@ async def get_thumbnail(file_id: str, db: Session = Depends(get_db)):
 
         return Response(content=thumbnail_data, media_type="image/jpeg")
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error getting thumbnail: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -343,6 +314,8 @@ async def start_scan(
     client: DropboxClient = Depends(get_dropbox_client)
 ):
     """Start scanning Dropbox folder"""
+    if db.query(AnalysisJob).filter(AnalysisJob.status.in_(["pending", "running"])).count():
+        raise HTTPException(status_code=409, detail="A scan is already running")
 
     # Create analysis job
     job = AnalysisJob(
@@ -396,15 +369,19 @@ def get_job_status(job_id: int, db: Session = Depends(get_db)):
 
 
 @app.get("/api/duplicates")
-def get_duplicates(db: Session = Depends(get_db)):
-    """Get all duplicate file groups"""
+def get_duplicates(limit: int = 100, offset: int = 0, db: Session = Depends(get_db)):
+    """Get one page of duplicate file groups."""
+    validate_limit_offset(limit, offset)
     detector = DuplicateDetector(db)
-    groups = detector.find_duplicates()
+    groups = detector.find_duplicates(limit, offset)
     stats = detector.get_duplicate_stats()
 
     return {
         "groups": groups,
-        "stats": stats
+        "stats": stats,
+        "limit": limit,
+        "offset": offset,
+        "has_more": offset + len(groups) < stats["duplicate_groups"],
     }
 
 
@@ -412,7 +389,7 @@ def get_duplicates(db: Session = Depends(get_db)):
 def get_similar(db: Session = Depends(get_db)):
     """Get all similar image groups"""
     detector = SimilarImageDetector(db)
-    groups = detector.find_similar_images()
+    groups = detector.list_saved_groups()
     stats = detector.get_similar_stats()
 
     return {
@@ -474,73 +451,218 @@ def list_files(
     }
 
 
-@app.post("/api/delete")
-async def delete_files(
-    request: DeleteRequest,
-    db: Session = Depends(get_db),
-    client: DropboxClient = Depends(get_dropbox_client)
-):
-    """
-    Delete files from Dropbox
-    SAFETY: Requires confirm=True to actually delete
-    SAFETY: Limited to 100 files per operation
-    SAFETY: Logs all deletions for audit trail
-    """
-    if not request.confirm:
-        # Preview mode - just return what would be deleted
-        logger.info(f"Delete preview requested for {len(request.paths)} files")
-        return {
-            "preview": True,
-            "files": request.paths,
-            "count": len(request.paths),
-            "message": "Set confirm=true to actually delete these files"
-        }
+def _validate_review_selection(db: Session, client, paths: List[str]):
+    """Reject unknown, changed, protected, or last-copy selections before a move."""
+    selected = set(paths)
+    if len(selected) != len(paths):
+        raise HTTPException(status_code=400, detail="Duplicate paths in selection")
+    if db.query(AnalysisJob).filter(AnalysisJob.status.in_(["pending", "running"])).count():
+        raise HTTPException(status_code=409, detail="Wait for the scan to finish")
 
-    # SAFETY: Log deletion attempt
-    logger.warning(f"DELETE OPERATION STARTED: {len(request.paths)} files requested for deletion")
-    for path in request.paths[:5]:  # Log first 5
-        logger.warning(f"  - {path}")
-    if len(request.paths) > 5:
-        logger.warning(f"  ... and {len(request.paths) - 5} more")
+    selected_files = db.query(FileMetadata).filter(FileMetadata.path.in_(paths)).all()
+    selected_hashes = {f.content_hash for f in selected_files if f.content_hash}
+    groups = (
+        db.query(DuplicateGroup).filter(DuplicateGroup.group_hash.in_(selected_hashes)).all()
+        + db.query(SimilarGroup).all()
+    )
+    related = set()
+    protected = set()
+    for group in groups:
+        members = set(group.file_paths or [])
+        related.update(members)
+        chosen = members & selected
+        if chosen:
+            keeper = getattr(group, "recommended_keep", None) or getattr(group, "best_quality_path", None)
+            if keeper:
+                protected.add(keeper)
+            if keeper in chosen:
+                raise HTTPException(status_code=409, detail=f"Protected recommended file: {keeper}")
+            if not members - selected:
+                raise HTTPException(status_code=409, detail="At least one reviewed file must remain")
+    if not selected <= related:
+        raise HTTPException(status_code=409, detail="Selection is not in the current review")
 
-    # Actually delete files
-    deleted = []
-    failed = []
-
-    mode = getattr(settings, "storage_mode", "local") or "local"
-    use_rate_limit = mode.lower() == "dropbox"
-
-    for path in request.paths:
-        if use_rate_limit:
-            await rate_limiter.wait_if_needed()
+    cached = {}
+    for path in selected | protected:
+        file = db.query(FileMetadata).filter(FileMetadata.path == path).first()
+        if file is None:
+            raise HTTPException(status_code=409, detail=f"Stale selection: {path}")
         try:
-            # SAFETY: Extra validation before deletion
-            if not path or path == '/':
-                failed.append({"path": path, "error": "Invalid path - cannot delete root"})
-                continue
+            current = client.get_file_metadata(path)
+        except Exception as exc:
+            raise HTTPException(status_code=409, detail=f"Could not verify {path}: {exc}") from exc
+        if (current.get("content_hash") != file.content_hash
+                or current.get("rev") != file.rev
+                or current.get("size") != file.size):
+            raise HTTPException(status_code=409, detail=f"File changed since scan: {path}")
+        cached[path] = file
+    return cached
 
-            client.delete_file(path)
-            deleted.append(path)
-            logger.info(f"DELETED: {path}")
 
-            # Remove from database
-            db.query(FileMetadata).filter(FileMetadata.path == path).delete()
-
-        except Exception as e:
-            error_msg = str(e)
-            logger.error(f"FAILED TO DELETE: {path} - {error_msg}")
-            failed.append({"path": path, "error": error_msg})
-
+def _refresh_review_groups(db: Session):
+    DuplicateDetector(db).rebuild_groups()
+    for group in db.query(SimilarGroup).all():
+        existing = {
+            row.path for row in db.query(FileMetadata.path)
+            .filter(FileMetadata.path.in_(group.file_paths)).all()
+        }
+        group.file_paths = [p for p in group.file_paths if p in existing]
+        if len(group.file_paths) < 2:
+            db.delete(group)
     db.commit()
 
-    # SAFETY: Log final results
-    logger.warning(f"DELETE OPERATION COMPLETED: {len(deleted)} deleted, {len(failed)} failed")
 
+def _reconcile_recovery(db: Session, client, backend: str):
+    """Expose moves that finished before their final database commit."""
+    pending = db.query(RecoveryRecord).filter(
+        RecoveryRecord.backend == backend,
+        RecoveryRecord.status == "pending",
+    ).all()
+    for row in pending:
+        try:
+            if client.path_exists(row.original_path):
+                continue
+            if backend == "local" and not client.recovery_exists(row.recovery_path):
+                continue
+            row.status = "active"
+            db.query(FileMetadata).filter(FileMetadata.path == row.original_path).delete()
+        except Exception as exc:
+            logger.warning("Could not reconcile recovery record %s: %s", row.id, exc)
+    if pending:
+        db.commit()
+
+
+@app.post("/api/trash")
+@app.post("/api/delete")
+async def trash_files(
+    request: DeleteRequest,
+    db: Session = Depends(get_db),
+    client=Depends(get_dropbox_client),
+):
+    """Move reviewed files to Dropbox Deleted files or local quarantine."""
+    cached = _validate_review_selection(db, client, request.paths)
+    backend = (getattr(settings, "storage_mode", "local") or "local").lower()
+    if not request.confirm:
+        return {
+            "preview": True, "files": request.paths, "count": len(request.paths),
+            "message": "Set confirm=true to move these files into recovery",
+        }
+
+    moved, failed = [], []
+    for path in request.paths:
+        file = cached[path]
+        token = uuid4().hex
+        record = RecoveryRecord(
+            backend=backend, original_path=path, revision=file.rev,
+            content_hash=file.content_hash, size=file.size, status="pending",
+            recovery_path=(str(client.quarantine_path(path, token)) if backend == "local" else None),
+        )
+        db.add(record)
+        db.commit()
+        try:
+            # Check again immediately before the actual operation.
+            current = client.get_file_metadata(path)
+            if (current.get("content_hash"), current.get("rev"), current.get("size")) != (
+                file.content_hash, file.rev, file.size
+            ):
+                raise ValueError("File changed since scan")
+            if backend == "dropbox":
+                await rate_limiter.wait_if_needed()
+                client.delete_file(path)
+            else:
+                client.trash_file(path, token)
+            record.status = "active"
+            db.query(FileMetadata).filter(FileMetadata.path == path).delete()
+            db.commit()
+            moved.append(path)
+        except Exception as exc:
+            # A remote response can fail after the move happened. Keep the
+            # recovery record discoverable when the source is now absent.
+            try:
+                moved_despite_error = not client.path_exists(path) and (
+                    backend == "dropbox" or client.recovery_exists(record.recovery_path)
+                )
+            except Exception:
+                moved_despite_error = False
+            record.status = "active" if moved_despite_error else "failed"
+            record.error = str(exc)
+            if moved_despite_error:
+                db.query(FileMetadata).filter(FileMetadata.path == path).delete()
+            db.commit()
+            if moved_despite_error:
+                moved.append(path)
+            else:
+                failed.append({"path": path, "error": str(exc)})
+    if moved:
+        _refresh_review_groups(db)
     return {
-        "deleted": deleted,
-        "deleted_count": len(deleted),
-        "failed": failed,
-        "failed_count": len(failed),
+        "trashed": moved, "trashed_count": len(moved),
+        "deleted": moved, "deleted_count": len(moved),
+        "failed": failed, "failed_count": len(failed),
+    }
+
+
+@app.get("/api/recovery")
+def get_recovery(db: Session = Depends(get_db), client=Depends(get_dropbox_client)):
+    backend = (getattr(settings, "storage_mode", "local") or "local").lower()
+    _reconcile_recovery(db, client, backend)
+    rows = db.query(RecoveryRecord).filter(
+        RecoveryRecord.status == "active", RecoveryRecord.backend == backend,
+    ).order_by(RecoveryRecord.id.desc()).all()
+    return {"files": [
+        {
+            "id": row.id, "path": row.original_path, "backend": row.backend,
+            "size": row.size, "created_at": row.created_at.isoformat() if row.created_at else None,
+        }
+        for row in rows
+    ]}
+
+
+@app.post("/api/restore")
+async def restore_files(
+    request: RestoreRequest,
+    db: Session = Depends(get_db),
+    client=Depends(get_dropbox_client),
+):
+    if not request.ids or len(request.ids) > 100 or len(set(request.ids)) != len(request.ids):
+        raise HTTPException(status_code=400, detail="Select 1 to 100 distinct recovery records")
+    rows = db.query(RecoveryRecord).filter(RecoveryRecord.id.in_(request.ids)).all()
+    backend = (getattr(settings, "storage_mode", "local") or "local").lower()
+    _reconcile_recovery(db, client, backend)
+    if len(rows) != len(request.ids) or any(row.status != "active" or row.backend != backend for row in rows):
+        raise HTTPException(status_code=409, detail="Recovery selection is no longer available")
+    if not request.confirm:
+        return {"preview": True, "files": [row.original_path for row in rows]}
+
+    restored, failed = [], []
+    for row in rows:
+        try:
+            if client.path_exists(row.original_path):
+                raise FileExistsError(f"Destination already exists: {row.original_path}")
+            if backend == "dropbox":
+                await rate_limiter.wait_if_needed()
+                metadata = client.restore_file(row.original_path, row.revision)
+            else:
+                client.restore_file(row.original_path, row.recovery_path)
+                metadata = client.get_file_metadata(row.original_path)
+            db.add(FileMetadata(
+                path=metadata["path"], name=metadata["name"],
+                size=metadata["size"], content_hash=metadata["content_hash"],
+                dropbox_id=metadata.get("id"), rev=metadata.get("rev"),
+                is_image=client.is_image(metadata["name"]),
+            ))
+            row.status = "restored"
+            row.restored_at = datetime.utcnow()
+            db.commit()
+            restored.append(row.original_path)
+        except Exception as exc:
+            db.rollback()
+            failed.append({"path": row.original_path, "error": str(exc)})
+    if restored:
+        _refresh_review_groups(db)
+    return {
+        "restored": restored, "restored_count": len(restored),
+        "failed": failed, "failed_count": len(failed),
     }
 
 
@@ -575,21 +697,39 @@ async def rename_files(
             failed.append({"operation": op, "error": "Missing from or to path"})
             continue
 
-        await rate_limiter.wait_if_needed()
         try:
+            file = db.query(FileMetadata).filter(FileMetadata.path == from_path).first()
+            if not file:
+                raise ValueError("Source is not in the latest scan")
+            current = client.get_file_metadata(from_path)
+            if (current.get("content_hash"), current.get("rev"), current.get("size")) != (
+                file.content_hash, file.rev, file.size
+            ):
+                raise ValueError("Source changed since scan")
+            if client.path_exists(to_path):
+                raise FileExistsError(f"Destination already exists: {to_path}")
+            if db.query(FileMetadata).filter(FileMetadata.path == to_path).first():
+                raise ValueError("Destination is in the scan cache; run another scan")
+            if (getattr(settings, "storage_mode", "local") or "local").lower() == "dropbox":
+                await rate_limiter.wait_if_needed()
             client.move_file(from_path, to_path)
             renamed.append(op)
 
             # Update in database
-            file = db.query(FileMetadata).filter(FileMetadata.path == from_path).first()
-            if file:
-                file.path = to_path
-                file.name = to_path.split('/')[-1]
+            file.path = to_path
+            file.name = to_path.split('/')[-1]
+            for group in db.query(SimilarGroup).all():
+                if from_path in group.file_paths:
+                    group.file_paths = [to_path if path == from_path else path for path in group.file_paths]
+                    if group.best_quality_path == from_path:
+                        group.best_quality_path = to_path
 
         except Exception as e:
             failed.append({"operation": op, "error": str(e)})
 
     db.commit()
+    if renamed:
+        _refresh_review_groups(db)
 
     return {
         "renamed": renamed,
@@ -628,13 +768,13 @@ def get_naming_suggestions(
     return {"suggestions": suggestions, "count": len(suggestions)}
 
 
-async def run_scan_job(
+def run_scan_job(
     job_id: int,
     path: str,
     recursive: bool,
     analyze_images: bool
 ):
-    """Background task to scan Dropbox folder"""
+    """Scan metadata in a worker thread without holding the listing in RAM."""
     from .database import SessionLocal
 
     db = SessionLocal()
@@ -648,116 +788,122 @@ async def run_scan_job(
         quality_scorer = ImageQualityScorer()
         similar_detector = SimilarImageDetector(db)
 
-        # List all files from storage backend
         print(f"Scanning folder: {path}")
         mode = getattr(settings, "storage_mode", "local") or "local"
-        use_rate_limit = mode.lower() == "dropbox"
         if mode.lower() == "dropbox":
             client = DropboxClient()
         else:
             client = LocalClient()
 
-        entries = client.list_folder(path, recursive=recursive)
-        scanned_paths = {entry['path'] for entry in entries if entry['type'] == 'file'}
-
-        job.total_files = len(entries)
-        db.commit()
-
-        # Process each file
-        for i, entry in enumerate(entries):
-            if use_rate_limit:
-                await rate_limiter.wait_if_needed()
-
-            if entry['type'] != 'file':
-                continue
-
-            # Check if file exists in database
-            existing = db.query(FileMetadata).filter(
-                FileMetadata.path == entry['path']
-            ).first()
-
-            is_image = client.is_image(entry['name'])
-            if i < 5:
-                print(f"SCAN DEBUG: {entry['path']} is_image={is_image}")
-
-            # Create or update file metadata
-            if not existing:
-                file_meta = FileMetadata(
-                    path=entry['path'],
-                    name=entry['name'],
-                    size=entry['size'],
-                    content_hash=entry.get('content_hash'),
-                    dropbox_id=entry.get('id'),
-                    modified=datetime.fromisoformat(entry['modified'].replace('Z', '+00:00')) if entry.get('modified') else None,
-                    rev=entry.get('rev'),
-                    is_image=is_image,
+        entries = (
+            client.iter_folder(path, recursive=recursive)
+            if hasattr(client, "iter_folder")
+            else client.list_folder(path, recursive=recursive)
+        )
+        def ingest(batch):
+            if not batch:
+                return
+            existing = {
+                row.path: row for row in db.query(FileMetadata)
+                .filter(FileMetadata.path.in_([entry["path"] for entry in batch])).all()
+            }
+            ids = [entry["id"] for entry in batch if entry.get("id")]
+            existing_by_id = {
+                row.dropbox_id: row for row in db.query(FileMetadata)
+                .filter(FileMetadata.dropbox_id.in_(ids)).all()
+            } if ids else {}
+            for entry in batch:
+                db.add(ScanSeen(job_id=job_id, path=entry["path"]))
+                file_meta = existing_by_id.get(entry.get("id")) if entry.get("id") else None
+                occupant = existing.get(entry["path"])
+                if occupant is not None and occupant.path != entry["path"]:
+                    occupant = None
+                if file_meta is None and (occupant is None or not entry.get("id")):
+                    file_meta = occupant
+                if occupant is not None and occupant is not file_meta:
+                    # A different file now owns this Dropbox path. Remove the
+                    # stale cache row before moving the matching ID into it.
+                    existing_by_id.pop(occupant.dropbox_id, None)
+                    db.delete(occupant)
+                    db.flush()
+                if file_meta is None:
+                    file_meta = FileMetadata(path=entry["path"])
+                    db.add(file_meta)
+                else:
+                    old_path = file_meta.path
+                    file_meta.path = entry["path"]
+                    if old_path != entry["path"]:
+                        db.flush()
+                existing[entry["path"]] = file_meta
+                changed = (
+                    file_meta.content_hash != entry.get("content_hash")
+                    or file_meta.rev != entry.get("rev")
                 )
-                db.add(file_meta)
-            else:
-                existing.size = entry['size']
-                existing.content_hash = entry.get('content_hash')
-                existing.rev = entry.get('rev')
-                existing.modified = datetime.fromisoformat(entry['modified'].replace('Z', '+00:00')) if entry.get('modified') else None
-                existing.is_image = is_image
-                file_meta = existing
+                file_meta.name = entry["name"]
+                file_meta.size = entry["size"]
+                file_meta.content_hash = entry.get("content_hash")
+                file_meta.dropbox_id = entry.get("id")
+                file_meta.rev = entry.get("rev")
+                file_meta.modified = (
+                    datetime.fromisoformat(entry["modified"].replace("Z", "+00:00"))
+                    if entry.get("modified") else None
+                )
+                file_meta.is_image = client.is_image(entry["name"])
+                if changed:
+                    file_meta.perceptual_hash = None
+                    file_meta.quality_score = None
+                if analyze_images and file_meta.is_image and not file_meta.perceptual_hash:
+                    try:
+                        image = client.get_image_for_analysis(entry["path"])
+                        if image:
+                            file_meta.perceptual_hash = similar_detector.compute_perceptual_hash(image)
+                            file_meta.quality_score = quality_scorer.compute_quality_score(image, entry["size"])
+                            file_meta.width, file_meta.height = image.size
+                            file_meta.format = image.format
+                    except Exception as exc:
+                        logger.warning("Image analysis failed for %s: %s", entry["path"], exc)
+                job.processed_files += 1
+            db.commit()
 
-            # Analyze images
-            if analyze_images and is_image and not file_meta.perceptual_hash:
-                try:
-                    image = client.get_image_for_analysis(entry['path'])
-                    if image:
-                        # Compute perceptual hash
-                        phash = similar_detector.compute_perceptual_hash(image)
-                        file_meta.perceptual_hash = phash
+        batch = []
+        for entry in entries:
+            job.total_files += 1
+            if entry["type"] == "file":
+                batch.append(entry)
+            if len(batch) == 500:
+                ingest(batch)
+                batch = []
+        ingest(batch)
 
-                        # Compute quality score
-                        quality = quality_scorer.compute_quality_score(image, entry['size'])
-                        file_meta.quality_score = quality
-                        file_meta.width = image.size[0]
-                        file_meta.height = image.size[1]
-                        file_meta.format = image.format
-
-                except Exception as e:
-                    print(f"Error analyzing image {entry['path']}: {e}")
-
-            # Update progress
-            job.processed_files = i + 1
-            job.progress = (i + 1) / job.total_files * 100
-
-            if i % 10 == 0:  # Commit every 10 files
-                db.commit()
-
-        db.commit()
-
-        # A repeat scan must not report files that have since been removed
-        # from the scanned folder. Keep records outside that folder intact.
+        # Remove stale records only inside the scanned folder. ScanSeen keeps
+        # this comparison in SQLite instead of a 700,000-path Python set.
         normalized_path = '/' + path.strip('/') if path.strip('/') else ''
-        for cached in db.query(FileMetadata).all():
-            if normalized_path:
-                in_scope = (
-                    cached.path.startswith(normalized_path + '/') if recursive
-                    else cached.path.rsplit('/', 1)[0] == normalized_path
-                )
-            else:
-                in_scope = recursive or cached.path.count('/') == 1
-            if in_scope and cached.path not in scanned_paths:
-                db.delete(cached)
+        stale = db.query(FileMetadata)
+        if normalized_path:
+            stale = stale.filter(FileMetadata.path.startswith(normalized_path + '/', autoescape=True))
+        if not recursive:
+            depth = normalized_path.count('/') + 1
+            stale = stale.filter(
+                func.length(FileMetadata.path) - func.length(func.replace(FileMetadata.path, '/', '')) == depth
+            )
+        stale.filter(
+            ~db.query(ScanSeen).filter(
+                ScanSeen.job_id == job_id,
+                ScanSeen.path == FileMetadata.path,
+            ).exists()
+        ).delete(synchronize_session=False)
+        db.query(ScanSeen).filter(ScanSeen.job_id == job_id).delete(synchronize_session=False)
         db.commit()
 
-        # Ensure image flags and hashes are correct for all files
-        refresh_image_metadata(db, client, analyze_images, similar_detector, quality_scorer)
-
-        # Run duplicate detection
-        print("Finding duplicates...")
         duplicate_detector = DuplicateDetector(db)
-        duplicates = duplicate_detector.find_duplicates()
-        job.duplicates_found = len(duplicates)
+        job.duplicates_found = duplicate_detector.rebuild_groups()
 
-        # Run similar image detection
         if analyze_images:
-            print("Finding similar images...")
             similar = similar_detector.find_similar_images()
             job.similar_groups_found = len(similar)
+        else:
+            db.query(SimilarGroup).delete()
+            job.similar_groups_found = 0
 
         # Calculate space savings
         dup_stats = duplicate_detector.get_duplicate_stats()
@@ -769,9 +915,14 @@ async def run_scan_job(
         job.progress = 100.0
 
     except Exception as e:
+        db.rollback()
+        job = db.query(AnalysisJob).filter(AnalysisJob.id == job_id).first()
         job.status = 'failed'
         job.error_message = str(e)
-        print(f"Scan job failed: {e}")
+        db.query(ScanSeen).filter(ScanSeen.job_id == job_id).delete(synchronize_session=False)
+        db.query(DuplicateGroup).delete(synchronize_session=False)
+        db.query(SimilarGroup).delete(synchronize_session=False)
+        logger.error("Scan job failed: %s", e)
 
     finally:
         db.commit()

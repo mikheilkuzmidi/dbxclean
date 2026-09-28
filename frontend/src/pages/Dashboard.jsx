@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { getStats, startScan, getJobStatus, formatBytes } from '../api';
 
-function Dashboard() {
+function Dashboard({ connection }) {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [scanning, setScanning] = useState(false);
@@ -9,9 +9,13 @@ function Dashboard() {
   const [scanPath, setScanPath] = useState('');
   const [analyzeImages, setAnalyzeImages] = useState(false);
   const [scanError, setScanError] = useState(null);
+  const pollRef = React.useRef(null);
 
   useEffect(() => {
     loadStats();
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
   }, []);
 
   const loadStats = async () => {
@@ -33,18 +37,25 @@ function Dashboard() {
       setScanProgress({ ...job, progress: 0 });
 
       // Poll for job status
-      const interval = setInterval(async () => {
-        const status = await getJobStatus(job.job_id);
-        setScanProgress(status);
-
-        if (status.status === 'completed' || status.status === 'failed') {
-          clearInterval(interval);
-          setScanning(false);
-          if (status.status === 'failed') {
-            setScanError(status.error_message);
-          } else {
-            loadStats(); // Reload stats after scan completes
+      pollRef.current = setInterval(async () => {
+        try {
+          const status = await getJobStatus(job.job_id);
+          setScanProgress(status);
+          if (status.status === 'completed' || status.status === 'failed') {
+            clearInterval(pollRef.current);
+            pollRef.current = null;
+            setScanning(false);
+            if (status.status === 'failed') {
+              setScanError(status.error_message);
+            } else {
+              loadStats();
+            }
           }
+        } catch (error) {
+          clearInterval(pollRef.current);
+          pollRef.current = null;
+          setScanning(false);
+          setScanError(error.message);
         }
       }, 2000);
     } catch (error) {
@@ -66,14 +77,14 @@ function Dashboard() {
     <div>
       <div className="page-header">
         <h1>Dashboard</h1>
-        <p className="text-secondary">Overview of your Dropbox organization</p>
+        <p className="text-secondary">Overview of {connection?.account_id === 'local' ? 'your local files' : 'your Dropbox files'}</p>
       </div>
 
       {/* Scan Controls */}
       <div className="card mb-4">
         <h3>Start Analysis</h3>
         <p className="text-secondary text-small mb-4">
-          Scan your Dropbox to find duplicates and similar images
+          Scan {connection?.account_id === 'local' ? 'your local directory' : 'Dropbox'} to find duplicates and similar images
         </p>
 
         <div className="flex gap-4 items-center">
@@ -103,7 +114,7 @@ function Dashboard() {
           Also find similar images (downloads image data for analysis)
         </label>
 
-        {scanError && !scanProgress && (
+        {scanError && (
           <p className="text-small text-secondary mt-2" style={{ color: 'var(--accent-red)' }}>
             Error: {scanError}
           </p>
@@ -113,7 +124,7 @@ function Dashboard() {
           <div className="mt-2">
             <div className="flex justify-between text-small mb-2">
               <span>{scanProgress.status}</span>
-              <span>{Math.round(scanProgress.progress)}%</span>
+              <span>{scanProgress.status === 'completed' ? '100%' : scanProgress.status === 'failed' ? 'Failed' : 'Scanning'}</span>
             </div>
             <div className="progress-bar">
               <div
@@ -121,14 +132,9 @@ function Dashboard() {
                 style={{ width: `${scanProgress.progress}%` }}
               ></div>
             </div>
-            {scanProgress.status === 'failed' && scanProgress.error_message && (
-              <p className="text-small text-secondary mt-2" style={{ color: 'var(--accent-red)' }}>
-                Error: {scanProgress.error_message}
-              </p>
-            )}
             {scanProgress.processed_files > 0 && (
               <p className="text-small text-secondary mt-2">
-                Processed {scanProgress.processed_files} / {scanProgress.total_files} files
+                Processed {scanProgress.processed_files.toLocaleString()} files
               </p>
             )}
           </div>
@@ -166,7 +172,7 @@ function Dashboard() {
         </div>
 
         <div className="stat-card">
-          <div className="stat-label">Space Can Save</div>
+          <div className="stat-label">Duplicate Data</div>
           <div className="stat-value" style={{ color: 'var(--accent-green)' }}>
             {formatBytes(
               (stats?.duplicates?.space_wasted_bytes || 0) +
@@ -174,7 +180,7 @@ function Dashboard() {
             )}
           </div>
           <div className="text-small text-secondary">
-            By removing duplicates and similar images
+            Extra copy bytes and reviewed similar images
           </div>
         </div>
       </div>

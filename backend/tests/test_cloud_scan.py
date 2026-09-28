@@ -137,3 +137,25 @@ def test_cloud_scan_finds_duplicates_without_downloading_and_refreshes_results(m
         assert job.duplicates_found == 0
         assert session.query(DuplicateGroup).count() == 0
         assert session.query(FileMetadata).count() == 2
+
+    # Moving a Dropbox ID onto a path previously cached for another ID must
+    # update the cache without violating its unique ID and path constraints.
+    FakeDropboxClient.files = [
+        ("/two/other.txt", "id:two", "a" * 64),
+        ("/two/new.txt", "id:other", "b" * 64),
+    ]
+    main.app.dependency_overrides[main.get_db] = get_test_db
+    main.app.dependency_overrides[main.get_dropbox_client] = FakeDropboxClient
+    try:
+        response = client.post("/api/scan", json={"path": "", "recursive": True})
+        assert response.status_code == 200, response.text
+        job_id = response.json()["job_id"]
+        assert client.get(f"/api/jobs/{job_id}").json()["status"] == "completed"
+    finally:
+        main.app.dependency_overrides.clear()
+    with session_factory() as session:
+        rows = session.query(FileMetadata).all()
+        assert {(row.path, row.dropbox_id) for row in rows} == {
+            ("/two/other.txt", "id:two"),
+            ("/two/new.txt", "id:other"),
+        }

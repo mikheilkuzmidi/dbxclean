@@ -34,21 +34,22 @@ class DropboxClient:
 
     def list_folder(self, path: str = "", recursive: bool = False) -> List[Dict[str, Any]]:
         """List files in a folder"""
+        return list(self.iter_folder(path, recursive=recursive))
+
+    def iter_folder(self, path: str = "", recursive: bool = False):
+        """Yield Dropbox metadata page by page without retaining the listing."""
         try:
-            entries = []
             result = self.dbx.files_list_folder(path, recursive=recursive)
 
             while True:
                 for entry in result.entries:
-                    entry_data = self._parse_entry(entry)
-                    entries.append(entry_data)
+                    yield self._parse_entry(entry)
 
                 if not result.has_more:
                     break
 
                 result = self.dbx.files_list_folder_continue(result.cursor)
 
-            return entries
         except ApiError as e:
             raise Exception(f"Error listing folder: {str(e)}")
 
@@ -119,18 +120,35 @@ class DropboxClient:
         except ApiError as e:
             raise Exception(f"Error getting metadata: {str(e)}")
 
+    def path_exists(self, path: str) -> bool:
+        try:
+            self.dbx.files_get_metadata(path)
+            return True
+        except ApiError as exc:
+            error = exc.error
+            if error.is_path() and error.get_path().is_not_found():
+                return False
+            raise
+
     def delete_file(self, path: str) -> bool:
-        """Delete a file from Dropbox"""
+        """Move a file into Dropbox Deleted files for its retention period."""
         try:
             self.dbx.files_delete_v2(path)
             return True
         except ApiError as e:
             raise Exception(f"Error deleting file: {str(e)}")
 
+    def restore_file(self, path: str, rev: str) -> Dict[str, Any]:
+        """Restore a recorded revision from Dropbox Deleted files."""
+        try:
+            return self._parse_entry(self.dbx.files_restore(path, rev))
+        except ApiError as e:
+            raise Exception(f"Error restoring file: {str(e)}")
+
     def move_file(self, from_path: str, to_path: str) -> bool:
         """Move/rename a file in Dropbox"""
         try:
-            self.dbx.files_move_v2(from_path, to_path)
+            self.dbx.files_move_v2(from_path, to_path, autorename=False)
             return True
         except ApiError as e:
             raise Exception(f"Error moving file: {str(e)}")

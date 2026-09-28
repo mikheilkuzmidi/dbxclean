@@ -33,8 +33,8 @@ export const getStats = async () => {
   return response.data;
 };
 
-export const getDuplicates = async () => {
-  const response = await api.get('/duplicates');
+export const getDuplicates = async (limit = 100, offset = 0) => {
+  const response = await api.get('/duplicates', { params: { limit, offset } });
   return response.data;
 };
 
@@ -50,11 +50,21 @@ export const getFiles = async (path = '', limit = 100, offset = 0) => {
   return response.data;
 };
 
-export const deleteFiles = async (paths, confirm = false) => {
-  const response = await api.post('/delete', {
+export const trashFiles = async (paths, confirm = false) => {
+  const response = await api.post('/trash', {
     paths,
     confirm,
   });
+  return response.data;
+};
+
+export const getRecovery = async () => {
+  const response = await api.get('/recovery');
+  return response.data;
+};
+
+export const restoreFiles = async (ids, confirm = false) => {
+  const response = await api.post('/restore', { ids, confirm });
   return response.data;
 };
 

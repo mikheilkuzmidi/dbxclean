@@ -11,7 +11,7 @@ set -e  # Exit on error
 # Check Python
 echo "📝 Checking prerequisites..."
 if ! command -v python3 &> /dev/null; then
-    echo "❌ Python 3 not found. Please install Python 3.9 or higher."
+    echo "❌ Python 3 not found. Please install Python 3.10 or higher."
     exit 1
 fi
 
@@ -60,7 +60,7 @@ pip install -r requirements.txt
 if [ ! -f ".env" ]; then
     echo "Creating .env file from template..."
     cp .env.example .env
-    echo "⚠️  Please edit backend/.env and add your DROPBOX_ACCESS_TOKEN"
+    echo "Set LOCAL_ROOT in backend/.env to the folder you want to scan. Dropbox mode is optional."
 fi
 
 # Initialize database
@@ -69,7 +69,7 @@ python scripts/init_db.py
 
 # Check requirements
 echo "Verifying backend setup..."
-python scripts/check_requirements.py
+python scripts/check_requirements.py || echo "Configure backend/.env before starting the app."
 
 cd ..
 
@@ -83,7 +83,7 @@ if [ "$NODE_AVAILABLE" = true ]; then
 
     if [ ! -d "node_modules" ]; then
         echo "Installing Node.js dependencies (this may take a few minutes)..."
-        npm install
+        npm ci
     else
         echo "Node modules already installed"
     fi
@@ -100,29 +100,8 @@ echo "✅ Installation complete!"
 echo "======================================"
 echo ""
 
-if [ ! -f "backend/.env" ] || ! grep -q "DROPBOX_ACCESS_TOKEN=sl\." "backend/.env" 2>/dev/null; then
-    echo "⚠️  Next steps:"
-    echo "1. Get your Dropbox access token:"
-    echo "   - Visit: https://www.dropbox.com/developers/apps"
-    echo "   - Create app with Full Dropbox access"
-    echo "   - Enable permissions: files.metadata.read, files.content.read, files.content.write"
-    echo "   - Generate access token"
-    echo ""
-    echo "2. Edit backend/.env and add your token:"
-    echo "   DROPBOX_ACCESS_TOKEN=your_token_here"
-    echo ""
-    echo "3. Start the application:"
-    echo "   ./start.sh"
-else
-    echo "🎉 Ready to run!"
-    echo ""
-    echo "Start the application with:"
-    echo "  ./start.sh"
-    echo ""
-    echo "Or manually:"
-    echo "  Terminal 1: cd backend && source venv/bin/activate && python -m app.main"
-    echo "  Terminal 2: cd frontend && npm run dev"
-fi
+echo "Set LOCAL_ROOT in backend/.env to an existing directory, then run ./start.sh."
+echo "Dropbox mode needs a Dropbox access token only when you choose it."
 
 echo ""
 echo "For more information, see SETUP.md"

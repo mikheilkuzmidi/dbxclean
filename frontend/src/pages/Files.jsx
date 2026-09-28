@@ -45,7 +45,7 @@ function Files() {
       .filter(s => selectedRenames[s.path])
       .map(s => ({
         from: s.path,
-        to: s.path.replace(s.current_name, s.suggested_name)
+        to: s.path.slice(0, -s.current_name.length) + s.suggested_name
       }));
 
     if (operations.length === 0) {
@@ -156,10 +156,10 @@ function Files() {
                     />
                     <div style={{ flex: 1 }}>
                       <div className="text-small text-secondary" style={{ textDecoration: 'line-through' }}>
-                        {suggestion.original}
+                        {suggestion.current_name}
                       </div>
                       <div className="file-name" style={{ color: 'var(--accent-green)' }}>
-                        {suggestion.suggested}
+                        {suggestion.suggested_name}
                       </div>
                     </div>
                   </div>

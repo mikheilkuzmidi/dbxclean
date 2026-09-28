@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getDuplicates, deleteFiles, formatBytes, getImageUrl } from '../api';
+import { getDuplicates, trashFiles, formatBytes, getImageUrl } from '../api';
 
 function Duplicates() {
   const [data, setData] = useState(null);
@@ -7,15 +7,17 @@ function Duplicates() {
   const [selectedFiles, setSelectedFiles] = useState({});
   const [showConfirm, setShowConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [offset, setOffset] = useState(0);
 
   useEffect(() => {
     loadDuplicates();
   }, []);
 
-  const loadDuplicates = async () => {
+  const loadDuplicates = async (nextOffset = 0) => {
     try {
-      const result = await getDuplicates();
-      setData(result);
+      const result = await getDuplicates(100, nextOffset);
+      setData(previous => nextOffset ? { ...result, groups: [...(previous?.groups || []), ...result.groups] } : result);
+      setOffset(nextOffset);
 
       // Pre-select files to delete (all except recommended)
       const selected = {};
@@ -26,7 +28,7 @@ function Duplicates() {
           }
         });
       });
-      setSelectedFiles(selected);
+      setSelectedFiles(previous => nextOffset ? { ...previous, ...selected } : selected);
     } catch (error) {
       console.error('Failed to load duplicates:', error);
     } finally {
@@ -49,11 +51,11 @@ function Duplicates() {
       return;
     }
 
-    // SAFETY: Extra confirmation for large deletions
+    // Ask for confirmation on a large recovery move.
     if (pathsToDelete.length > 50) {
       const reallyConfirm = window.confirm(
-        `⚠️ WARNING: You are about to delete ${pathsToDelete.length} files!\n\n` +
-        `This is a LARGE deletion. Are you absolutely sure?\n\n` +
+        `Move ${pathsToDelete.length} files into recovery?\n\n` +
+        `This is a large selection.\n\n` +
         `Click OK to proceed, or Cancel to go back.`
       );
       if (!reallyConfirm) {
@@ -63,34 +65,34 @@ function Duplicates() {
 
     // SAFETY: Check for 100 file limit
     if (pathsToDelete.length > 100) {
-      alert(`⚠️ SAFETY LIMIT: Cannot delete more than 100 files at once.\n\nYou selected ${pathsToDelete.length} files.\n\nPlease delete in smaller batches for safety.`);
+      alert(`You can move up to 100 files at once. You selected ${pathsToDelete.length}.`);
       return;
     }
 
     try {
       setDeleting(true);
-      const result = await deleteFiles(pathsToDelete, true);
+      const result = await trashFiles(pathsToDelete, true);
 
       if (result.failed_count > 0) {
         alert(
-          `Deletion completed:\n\n` +
-          `✅ Successfully deleted: ${result.deleted_count} files\n` +
+          `Recovery move completed:\n\n` +
+          `Moved: ${result.trashed_count} files\n` +
           `❌ Failed: ${result.failed_count} files\n\n` +
           `Check the console for details about failed deletions.`
         );
-        console.error('Failed deletions:', result.failed);
+        console.error('Failed moves:', result.failed);
       } else {
-        alert(`✅ Successfully deleted ${result.deleted_count} files!`);
+        alert(`Moved ${result.trashed_count} files into recovery.`);
       }
 
-      if (result.deleted_count > 0) {
-        loadDuplicates(); // Reload data
+      if (result.trashed_count > 0) {
+        loadDuplicates();
       }
 
       setShowConfirm(false);
     } catch (error) {
-      console.error('Failed to delete files:', error);
-      alert(`❌ Error: ${error.message}\n\nNo files were deleted. Please try again.`);
+      console.error('Failed to move files:', error);
+      alert(`Error: ${error.response?.data?.detail || error.message}`);
     } finally {
       setDeleting(false);
     }
@@ -149,7 +151,7 @@ function Duplicates() {
             onClick={() => setShowConfirm(true)}
             disabled={selectedCount === 0 || deleting}
           >
-            Delete Selected
+            Move Selected to Recovery
           </button>
         </div>
       </div>
@@ -161,7 +163,7 @@ function Duplicates() {
             <div>
               <h4>{group.file_count} identical files</h4>
               <p className="text-small text-secondary">
-                {formatBytes(group.total_size)} total • Can save {formatBytes(group.space_can_save)}
+                {formatBytes(group.total_size)} total • {formatBytes(group.space_can_save)} in extra copies
               </p>
             </div>
           </div>
@@ -204,20 +206,25 @@ function Duplicates() {
           </div>
         </div>
       ))}
+      {data.has_more && (
+        <button className="btn-secondary" onClick={() => loadDuplicates(offset + 100)}>
+          Load More Groups
+        </button>
+      )}
 
       {/* Confirmation Modal */}
       {showConfirm && (
         <div className="modal-overlay" onClick={() => setShowConfirm(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>⚠️ Confirm Deletion</h2>
+              <h2>Confirm Recovery Move</h2>
             </div>
             <div>
               <p style={{ fontSize: '1.1rem', fontWeight: 600 }}>
-                Are you sure you want to delete {selectedCount} files?
+                Move {selectedCount} files into recovery?
               </p>
               <p className="text-secondary text-small mt-2">
-                This will free up {formatBytes(selectedSize)} of space.
+                Selected files total {formatBytes(selectedSize)}.
               </p>
               <div style={{
                 backgroundColor: 'var(--bg-tertiary)',
@@ -227,10 +234,10 @@ function Duplicates() {
                 border: '2px solid var(--accent-red)'
               }}>
                 <p className="text-small" style={{ color: 'var(--accent-red)', fontWeight: 600 }}>
-                  ⚠️ THIS ACTION CANNOT BE UNDONE!
+                  These files can be restored from the Recovery page.
                 </p>
                 <p className="text-small mt-2">
-                  The files will be permanently deleted from your Dropbox.
+                  Dropbox recovery lasts for your account retention period. Local files remain in quarantine.
                 </p>
                 {selectedCount > 20 && (
                   <p className="text-small mt-2" style={{ color: 'var(--accent-yellow)', fontWeight: 600 }}>
@@ -239,7 +246,7 @@ function Duplicates() {
                 )}
               </div>
               <p className="text-small text-secondary mt-2">
-                ℹ️ Recommended files (highlighted in green) are protected and will NOT be deleted.
+                Recommended files (highlighted in green) are protected.
               </p>
             </div>
             <div className="modal-footer">
@@ -248,14 +255,14 @@ function Duplicates() {
                 onClick={() => setShowConfirm(false)}
                 disabled={deleting}
               >
-                Cancel - Don't Delete
+                Cancel
               </button>
               <button
                 className="btn-danger"
                 onClick={handleDeleteSelected}
                 disabled={deleting}
               >
-                {deleting ? 'Deleting...' : `Yes, Delete ${selectedCount} Files`}
+                {deleting ? 'Moving...' : `Move ${selectedCount} Files`}
               </button>
             </div>
           </div>

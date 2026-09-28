@@ -1,6 +1,7 @@
 import React from 'react';
 
 function Settings({ connection }) {
+  const local = connection?.account_id === 'local';
   return (
     <div>
       <div className="page-header">
@@ -10,20 +11,22 @@ function Settings({ connection }) {
 
       {/* Account Info */}
       <div className="card mb-4">
-        <h3>Dropbox Account</h3>
+        <h3>{local ? 'Local Storage' : 'Dropbox Account'}</h3>
         <div style={{ marginTop: '1rem' }}>
           <div className="flex justify-between" style={{ padding: '0.5rem 0' }}>
-            <span className="text-secondary">Name:</span>
+            <span className="text-secondary">{local ? 'Root:' : 'Name:'}</span>
             <span>{connection?.name || 'Not connected'}</span>
           </div>
-          <div className="flex justify-between" style={{ padding: '0.5rem 0' }}>
-            <span className="text-secondary">Email:</span>
-            <span>{connection?.email || 'Not available'}</span>
-          </div>
-          <div className="flex justify-between" style={{ padding: '0.5rem 0' }}>
-            <span className="text-secondary">Account ID:</span>
-            <span className="text-small">{connection?.account_id || 'Not available'}</span>
-          </div>
+          {!local && <>
+            <div className="flex justify-between" style={{ padding: '0.5rem 0' }}>
+              <span className="text-secondary">Email:</span>
+              <span>{connection?.email || 'Not available'}</span>
+            </div>
+            <div className="flex justify-between" style={{ padding: '0.5rem 0' }}>
+              <span className="text-secondary">Account ID:</span>
+              <span className="text-small">{connection?.account_id || 'Not available'}</span>
+            </div>
+          </>}
           <div className="flex justify-between" style={{ padding: '0.5rem 0' }}>
             <span className="text-secondary">Status:</span>
             <span className={`badge ${connection?.connected ? 'badge-success' : ''}`}>
@@ -37,18 +40,22 @@ function Settings({ connection }) {
       <div className="card mb-4">
         <h3>Configuration</h3>
         <p className="text-secondary text-small mb-4">
-          To configure your Dropbox access token, edit the <code>backend/.env</code> file
+          Edit <code>backend/.env</code> and restart the backend to change storage.
         </p>
 
         <div style={{ backgroundColor: 'var(--bg-tertiary)', padding: '1rem', borderRadius: 'var(--radius-sm)', fontFamily: 'monospace', fontSize: '0.875rem' }}>
-          <div>DROPBOX_ACCESS_TOKEN=your_token_here</div>
-          <div>DROPBOX_APP_KEY=your_app_key</div>
-          <div>DROPBOX_APP_SECRET=your_app_secret</div>
+          {local ? <>
+            <div>STORAGE_MODE=local</div>
+            <div>LOCAL_ROOT=/absolute/path/to/files</div>
+          </> : <>
+            <div>STORAGE_MODE=dropbox</div>
+            <div>DROPBOX_ACCESS_TOKEN=your_token_here</div>
+          </>}
         </div>
       </div>
 
       {/* How to Get Token */}
-      <div className="card mb-4">
+      {!local && <div className="card mb-4">
         <h3>How to Get Dropbox Access Token</h3>
         <ol style={{ marginLeft: '1.5rem', marginTop: '1rem' }}>
           <li style={{ marginBottom: '0.5rem' }}>
@@ -75,7 +82,7 @@ function Settings({ connection }) {
             Copy the token to your <code>.env</code> file
           </li>
         </ol>
-      </div>
+      </div>}
 
       {/* Analysis Settings */}
       <div className="card">
@@ -108,9 +115,9 @@ function Settings({ connection }) {
 
       {/* About */}
       <div className="card" style={{ marginTop: '2rem', textAlign: 'center' }}>
-        <h3>dbxclean v1.0.0</h3>
+        <h3>dbxclean</h3>
         <p className="text-secondary text-small">
-          Intelligent file deduplication and organization for Dropbox
+          Review exact duplicates in Dropbox or local files
         </p>
       </div>
     </div>

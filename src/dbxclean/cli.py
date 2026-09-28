@@ -9,6 +9,7 @@ walk through the interface and confirm otherwise, and even then the answer is
 from __future__ import annotations
 
 import sys
+import shlex
 from pathlib import Path
 
 from dbxclean import keys, tui
@@ -19,7 +20,7 @@ USAGE = """dbxclean - find duplicate files and set them aside safely
 Usage:
   dbxclean            Start the interface, choose a directory, review
   dbxclean --help     Show this message
-  dbxclean --restore  Put everything back out of quarantine
+  dbxclean --restore [DIRECTORY]  Put files back out of quarantine
 
 Nothing is ever deleted. Duplicates you select are moved into a quarantine
 directory beside the files, and every move is logged so it can be undone. One
@@ -27,8 +28,8 @@ copy of every group is always kept.
 """
 
 
-def run_restore() -> int:
-    root = Path.cwd()
+def run_restore(root: Path | None = None) -> int:
+    root = (root or Path.cwd()).expanduser().resolve()
     quarantine = Quarantine(root)
     restored = quarantine.restore_all()
     if not restored:
@@ -47,7 +48,13 @@ def main(argv: list[str] | None = None) -> int:
         print(USAGE)
         return 0
     if "--restore" in args:
-        return run_restore()
+        if args[0] != "--restore" or len(args) > 2:
+            print(USAGE, file=sys.stderr)
+            return 2
+        return run_restore(Path(args[1]) if len(args) == 2 else None)
+    if args:
+        print(USAGE, file=sys.stderr)
+        return 2
 
     try:
         with keys.raw_mode():
@@ -96,7 +103,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  {moved} files moved into {quarantine.dir}")
             print(f"  One copy of every group was kept.")
             print(f"  Log: {quarantine.oplog}")
-            print(f"\n  Undo all of it with: dbxclean --restore\n")
+            print(f"\n  Undo all of it with: dbxclean --restore {shlex.quote(str(root))}\n")
             return 0
 
     except keys.NotATerminal:

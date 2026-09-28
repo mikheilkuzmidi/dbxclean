@@ -1,32 +1,26 @@
-"""
-The rules that make this tool safe to run.
-
-The web API this repository already contains deletes for real: local storage
-calls os.remove and Dropbox storage calls files_delete_v2, both immediately and
-irreversibly, and nothing in that path checks whether the file being removed is
-the last surviving copy of its contents. Given a duplicate group, deleting
-every path in it was entirely possible.
-
-Everything here exists to make that impossible:
-
-  * Nothing is destructive unless the caller explicitly opts in.
-  * A duplicate group always keeps one member, chosen deterministically.
-  * Removal means moving into a quarantine directory, not unlinking.
-  * Every action is appended to a log that can be read back and reversed.
-"""
+"""Local duplicate grouping and reversible CLI quarantine operations."""
 
 from __future__ import annotations
 
 import hashlib
 import json
 import os
-import shutil
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
 QUARANTINE_DIRNAME = ".dbxclean-quarantine"
 OPLOG_NAME = "operations.jsonl"
+
+
+def move_without_replace(source: Path, target: Path) -> None:
+    """Move a file on one filesystem without ever replacing the target."""
+    os.link(source, target)
+    try:
+        source.unlink()
+    except OSError:
+        target.unlink()
+        raise
 
 
 def content_hash(path: Path, chunk: int = 1 << 20) -> str:
@@ -109,8 +103,10 @@ class Quarantine:
     """
 
     def __init__(self, root: Path):
-        self.root = Path(root)
+        self.root = Path(root).resolve()
         self.dir = self.root / QUARANTINE_DIRNAME
+        if self.dir.is_symlink():
+            raise ValueError("Quarantine directory cannot be a symlink")
         self.oplog = self.dir / OPLOG_NAME
 
     def _record(self, entry: dict) -> None:
@@ -121,8 +117,12 @@ class Quarantine:
     def hold(self, path: Path, *, digest: str, keeper: Path) -> Path:
         """Move one file into quarantine and record how to put it back."""
         relative = path.relative_to(self.root)
+        if self.dir.is_symlink():
+            raise ValueError("Quarantine directory cannot be a symlink")
         target = self.dir / relative
         target.parent.mkdir(parents=True, exist_ok=True)
+        if not target.parent.resolve().is_relative_to(self.dir.resolve()):
+            raise ValueError("Quarantine path escaped its root")
 
         # Never overwrite something already quarantined under the same name.
         if target.exists():
@@ -132,7 +132,7 @@ class Quarantine:
                 target = target.with_name(f"{stem}.{counter}{suffix}")
                 counter += 1
 
-        shutil.move(str(path), str(target))
+        move_without_replace(path, target)
         self._record(
             {
                 "at": datetime.now(timezone.utc).isoformat(),
@@ -156,11 +156,9 @@ class Quarantine:
             entry = json.loads(line)
             if entry.get("action") != "quarantine":
                 continue
-            src, dst = Path(entry["to"]), Path(entry["from"])
-            if src.exists() and not dst.exists():
-                dst.parent.mkdir(parents=True, exist_ok=True)
-                shutil.move(str(src), str(dst))
-                restored.append((src, dst))
+            result = self.restore_one(Path(entry["to"]), record=False)
+            if result is not None:
+                restored.append(result)
         if restored:
             self._record(
                 {
@@ -170,6 +168,32 @@ class Quarantine:
                 }
             )
         return restored
+
+    def restore_one(self, target: Path, *, record: bool = True) -> tuple[Path, Path] | None:
+        """Restore one logged file without replacing an existing destination."""
+        if not self.oplog.exists():
+            return None
+        if Path(target).is_symlink():
+            raise ValueError("Recovery path cannot be a symlink")
+        target = Path(target).resolve()
+        if not target.is_relative_to(self.dir.resolve()):
+            raise ValueError("Recovery path is outside quarantine")
+        entries = [json.loads(line) for line in self.oplog.read_text(encoding="utf-8").splitlines() if line.strip()]
+        matching = [entry for entry in entries if entry.get("action") == "quarantine" and Path(entry["to"]).resolve() == target]
+        if not matching:
+            raise ValueError("Recovery path was not logged")
+        original = Path(matching[-1]["from"])
+        if not original.resolve().is_relative_to(self.root.resolve()):
+            raise ValueError("Original path is outside scan root")
+        if not target.exists():
+            return None
+        if original.exists() or original.is_symlink():
+            raise FileExistsError(f"Restore destination already exists: {original}")
+        original.parent.mkdir(parents=True, exist_ok=True)
+        move_without_replace(target, original)
+        if record:
+            self._record({"at": datetime.now(timezone.utc).isoformat(), "action": "restore", "from": str(target), "to": str(original)})
+        return target, original
 
 
 def find_duplicates(root: Path, *, skip_hidden: bool = True) -> list[DuplicateGroup]:

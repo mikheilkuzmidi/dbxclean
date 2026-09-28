@@ -45,6 +45,8 @@ class SimilarImageDetector:
         ).all()
 
         if not images:
+            self.db.query(SimilarGroup).delete()
+            self.db.commit()
             return []
 
         # Compare all pairs to find similar images
@@ -79,6 +81,23 @@ class SimilarImageDetector:
         self._save_similar_groups(similar_groups)
 
         return similar_groups
+
+    def list_saved_groups(self) -> List[Dict]:
+        """Return the groups produced by the last optional image scan."""
+        result = []
+        for group in self.db.query(SimilarGroup).all():
+            files = (
+                self.db.query(FileMetadata)
+                .filter(FileMetadata.path.in_(group.file_paths))
+                .all()
+            )
+            if len(files) > 1 and group.best_quality_path in {file.path for file in files}:
+                data = self._create_similar_group(files)
+                data["best_quality_path"] = group.best_quality_path
+                for file in data["files"]:
+                    file["is_best_quality"] = file["path"] == group.best_quality_path
+                result.append(data)
+        return result
 
     def _create_similar_group(self, images: List[FileMetadata]) -> Dict:
         """Create a similar image group with quality ranking and distance metrics"""
