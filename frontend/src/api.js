@@ -14,7 +14,7 @@ export const checkConnection = async () => {
   return response.data;
 };
 
-export const startScan = async (path = '', recursive = true, analyzeImages = true) => {
+export const startScan = async (path = '', recursive = true, analyzeImages = false) => {
   const response = await api.post('/scan', {
     path,
     recursive,

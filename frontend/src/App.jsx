@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, NavLink, useLocation, Link } from 'react-router-dom';
+import { Routes, Route, NavLink, Link, useLocation } from 'react-router-dom';
 import './App.css';
 import { checkConnection } from './api';
 import Dashboard from './pages/Dashboard';
@@ -10,6 +10,7 @@ import Settings from './pages/Settings';
 import NotFound from './pages/NotFound';
 
 function App() {
+  const location = useLocation();
   const [connection, setConnection] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -38,7 +39,7 @@ function App() {
     );
   }
 
-  if (!connection?.connected) {
+  if (!connection?.connected && location.pathname !== '/settings') {
     return (
       <div className="error-screen">
         <h1>Connection Error</h1>
@@ -52,7 +53,6 @@ function App() {
   }
 
   return (
-    <Router>
       <div className="app">
         <nav className="sidebar">
           <div className="sidebar-header">
@@ -101,7 +101,6 @@ function App() {
           </Routes>
         </main>
       </div>
-    </Router>
   );
 }
 

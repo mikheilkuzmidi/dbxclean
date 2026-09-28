@@ -5,7 +5,7 @@ interface. Nothing is ever deleted.
 
 ![Point it at a directory, choose what to set aside, then put all of it back](docs/dbxclean.gif)
 
-That is a real run: thirty files in six duplicate groups, the review screen,
+That is a real run: 28 files in five duplicate groups, the review screen,
 the move into quarantine, and then `--restore` putting every file back where it
 came from.
 
@@ -80,6 +80,10 @@ instead of a local directory, with perceptual hashing for similar images,
 quality scoring and renaming suggestions. It needs a Dropbox token, a database
 and two processes.
 
+Its default scan finds exact duplicates from Dropbox content hashes in file
+metadata, without downloading the files. Similar-image analysis is an optional
+checkbox because it needs image data or thumbnails.
+
 It is documented separately, in [docs/web-app.md](docs/web-app.md), along with
 [SETUP.md](SETUP.md) and [LOCAL_MODE.md](LOCAL_MODE.md).
 
@@ -94,4 +98,3 @@ MIT. See [LICENSE](LICENSE).
 ## Support
 
 For issues or questions, please open an issue on GitHub.
-

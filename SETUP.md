@@ -94,6 +94,7 @@ notepad .env
 Update these values:
 
 ```env
+STORAGE_MODE=dropbox
 DROPBOX_ACCESS_TOKEN=sl.your_actual_token_here
 
 # Optional: customize these if needed

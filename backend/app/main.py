@@ -107,7 +107,7 @@ class ConnectionResponse(BaseModel):
 class ScanRequest(BaseModel):
     path: str = ""
     recursive: bool = True
-    analyze_images: bool = True
+    analyze_images: bool = False
 
     @validator('path')
     def validate_path_field(cls, v):
@@ -658,6 +658,7 @@ async def run_scan_job(
             client = LocalClient()
 
         entries = client.list_folder(path, recursive=recursive)
+        scanned_paths = {entry['path'] for entry in entries if entry['type'] == 'file'}
 
         job.total_files = len(entries)
         db.commit()
@@ -695,6 +696,7 @@ async def run_scan_job(
             else:
                 existing.size = entry['size']
                 existing.content_hash = entry.get('content_hash')
+                existing.rev = entry.get('rev')
                 existing.modified = datetime.fromisoformat(entry['modified'].replace('Z', '+00:00')) if entry.get('modified') else None
                 existing.is_image = is_image
                 file_meta = existing
@@ -725,6 +727,21 @@ async def run_scan_job(
             if i % 10 == 0:  # Commit every 10 files
                 db.commit()
 
+        db.commit()
+
+        # A repeat scan must not report files that have since been removed
+        # from the scanned folder. Keep records outside that folder intact.
+        normalized_path = '/' + path.strip('/') if path.strip('/') else ''
+        for cached in db.query(FileMetadata).all():
+            if normalized_path:
+                in_scope = (
+                    cached.path.startswith(normalized_path + '/') if recursive
+                    else cached.path.rsplit('/', 1)[0] == normalized_path
+                )
+            else:
+                in_scope = recursive or cached.path.count('/') == 1
+            if in_scope and cached.path not in scanned_paths:
+                db.delete(cached)
         db.commit()
 
         # Ensure image flags and hashes are correct for all files

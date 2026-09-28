@@ -7,6 +7,7 @@ function Dashboard() {
   const [scanning, setScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState(null);
   const [scanPath, setScanPath] = useState('');
+  const [analyzeImages, setAnalyzeImages] = useState(false);
   const [scanError, setScanError] = useState(null);
 
   useEffect(() => {
@@ -28,7 +29,7 @@ function Dashboard() {
     try {
       setScanning(true);
       setScanError(null);
-      const job = await startScan(scanPath, true, true);
+      const job = await startScan(scanPath, true, analyzeImages);
       setScanProgress({ ...job, progress: 0 });
 
       // Poll for job status
@@ -92,6 +93,15 @@ function Dashboard() {
             {scanning ? 'Scanning...' : 'Start Scan'}
           </button>
         </div>
+        <label className="flex gap-2 items-center mt-2 text-small">
+          <input
+            type="checkbox"
+            checked={analyzeImages}
+            onChange={(event) => setAnalyzeImages(event.target.checked)}
+            disabled={scanning}
+          />
+          Also find similar images (downloads image data for analysis)
+        </label>
 
         {scanError && !scanProgress && (
           <p className="text-small text-secondary mt-2" style={{ color: 'var(--accent-red)' }}>

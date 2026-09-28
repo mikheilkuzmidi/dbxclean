@@ -14,19 +14,21 @@ function Settings({ connection }) {
         <div style={{ marginTop: '1rem' }}>
           <div className="flex justify-between" style={{ padding: '0.5rem 0' }}>
             <span className="text-secondary">Name:</span>
-            <span>{connection.name}</span>
+            <span>{connection?.name || 'Not connected'}</span>
           </div>
           <div className="flex justify-between" style={{ padding: '0.5rem 0' }}>
             <span className="text-secondary">Email:</span>
-            <span>{connection.email}</span>
+            <span>{connection?.email || 'Not available'}</span>
           </div>
           <div className="flex justify-between" style={{ padding: '0.5rem 0' }}>
             <span className="text-secondary">Account ID:</span>
-            <span className="text-small">{connection.account_id}</span>
+            <span className="text-small">{connection?.account_id || 'Not available'}</span>
           </div>
           <div className="flex justify-between" style={{ padding: '0.5rem 0' }}>
             <span className="text-secondary">Status:</span>
-            <span className="badge badge-success">Connected</span>
+            <span className={`badge ${connection?.connected ? 'badge-success' : ''}`}>
+              {connection?.connected ? 'Connected' : 'Not connected'}
+            </span>
           </div>
         </div>
       </div>

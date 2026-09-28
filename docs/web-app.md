@@ -16,6 +16,7 @@ dependencies, no token and no server, and it never deletes anything.
 - **Image Quality Scoring**: Automatically identify the best quality version of similar images
 - **File Renaming Suggestions**: Get intelligent suggestions for poorly named files
 - **Cloud-Based Analysis**: Works with Dropbox cloud files without downloading everything to your laptop
+- **Metadata-Only Exact Scan**: The default scan groups Dropbox content hashes without downloading file content. Turn on similar-image analysis to fetch image data or thumbnails.
 - **Minimalistic UI**: Clean, intuitive interface inspired by Dropbox and Apple Photos
 - **Safe Operations**: All deletions and renames require explicit user confirmation
 - **Rate Limiting**: Respects Dropbox API limits with intelligent rate limiting
@@ -106,6 +107,7 @@ nano .env  # or use any text editor
 Add your token to `.env`:
 ```env
 DROPBOX_ACCESS_TOKEN=your_dropbox_token_here
+STORAGE_MODE=dropbox
 ```
 
 ### 3. Frontend Setup

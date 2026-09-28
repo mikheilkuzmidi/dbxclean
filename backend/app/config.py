@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     dropbox_app_secret: Optional[str] = None
 
     # Storage mode: "dropbox" or "local"
-    storage_mode: str = "local"
+    storage_mode: str = "dropbox"
     local_root: str = "/"
 
     # Database
